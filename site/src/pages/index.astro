@@ -1,0 +1,190 @@
+---
+import Base from "../layouts/Base.astro";
+import { SITE } from "../config.js";
+import { groups, policies } from "../lib/policies.js";
+import { PERSONAS } from "../scene/persona-data.js";
+import districts from "../data/districts.json";
+---
+
+<Base bodyClass="app is-opening" themeColor="#060a18">
+  <Fragment slot="head">
+    <link rel="preload" href="/data/terrain.bin" as="fetch" crossorigin />
+    <link rel="preload" href="/data/geo.json" as="fetch" crossorigin />
+  </Fragment>
+
+  <div id="stage" aria-label="臺北盆地 3D 模型：以時間呈現上任前後與未來規劃的城市變化"></div>
+
+  <header class="brand">
+    <a class="brand-lockup" href="/policies/" aria-label="全部政策">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-mark">{SITE.campaign}</span>
+      <span class="brand-tag">{SITE.campaignEn}</span>
+    </a>
+    <div class="brand-sub">{SITE.short}・從上任那天，到下一個臺北</div>
+  </header>
+
+  <div id="counter" class="counter" aria-live="off">
+    <div class="counter-stage" id="counter-stage">上任那天</div>
+    <div class="counter-date" id="counter-date">2022.12.25</div>
+  </div>
+
+  <ol id="captions" class="captions" aria-live="polite"></ol>
+
+  <button id="skip" class="skip">略過開場 ▸</button>
+
+  <section id="outro" class="outro" hidden>
+    <p class="outro-eyebrow">從上任那天，到下一個臺北</p>
+    <h1 class="outro-title">每一個願景，<br />都蓋在做到的事上。</h1>
+    <div class="outro-actions">
+      <button id="cta-me" class="btn btn-primary">我的臺北：哪些政策跟我有關？</button>
+      <button id="cta-curtain" class="btn btn-ghost">拖曳簾幕，看上任那天 ⇆</button>
+      <button id="cta-explore" class="btn btn-link">自由探索</button>
+    </div>
+  </section>
+
+  <div id="pins" class="pins"></div>
+
+  <div id="curtain" class="curtain" hidden>
+    <div class="curtain-line"></div>
+    <div class="curtain-label left"><b>上任那天</b><span>2022.12.25</span></div>
+    <div class="curtain-label right"><b id="curtain-right-title">今天</b><span id="curtain-right-date">2026.10.23</span></div>
+    <button class="curtain-handle" id="curtain-handle" aria-label="拖曳比較上任那天與現在">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l-6 6 6 6M15 6l6 6-6 6"></path></svg>
+    </button>
+  </div>
+
+  <nav class="hud" id="hud" aria-label="時間與比較">
+    <div class="legend">
+      <span><i style="--c: var(--start)"></i>起點</span>
+      <span><i style="--c: var(--done)"></i>做到了</span>
+      <span><i style="--c: var(--ongoing)"></i>正在做</span>
+      <span><i style="--c: var(--planned)"></i>接下來</span>
+    </div>
+    <div class="hud-row">
+      <button id="me-toggle" class="btn btn-me">★ 我的臺北</button>
+      <button id="curtain-toggle" class="btn btn-curtain" aria-pressed="false">⇆ 時間簾幕</button>
+      <button id="style-toggle" class="btn btn-style">▦ 模擬城市</button>
+      <div class="timeline" id="timeline">
+        <div class="track"><div class="fill" id="track-fill"></div></div>
+        <div class="stops" id="stops"></div>
+        <div class="thumb" id="thumb" role="slider" tabindex="0" aria-label="時間" aria-valuemin="0" aria-valuemax="3"></div>
+      </div>
+      <div class="readout"><span id="readout-stage">今天</span><b id="readout-date">2026.10.23</b></div>
+    </div>
+  </nav>
+
+  <div class="status-bar" aria-label="政策進度">
+    <span style="--c: var(--done)"><i></i>做到了 <b id="st-done">0</b></span>
+    <span style="--c: var(--ongoing)"><i></i>正在做 <b id="st-ongoing">0</b></span>
+    <span style="--c: var(--planned)"><i></i>接下來 <b id="st-planned">0</b></span>
+  </div>
+
+  <button id="list-toggle" class="list-toggle">全部政策 <b id="list-count"></b></button>
+
+  <aside id="card" class="card" hidden aria-live="polite">
+    <button class="card-close" id="card-close" aria-label="關閉">×</button>
+    <div id="card-body"></div>
+  </aside>
+
+  <!-- 我的臺北: pick who you are and where you live -->
+  <div id="me" class="me" hidden role="dialog" aria-modal="true" aria-labelledby="me-title">
+    <div class="me-box">
+      <button class="card-close" id="me-close" aria-label="關閉">×</button>
+      <p class="me-eyebrow">我的臺北</p>
+      <h2 id="me-title">哪些政策跟你有關？</h2>
+      <p class="me-hint">選出符合你的身分（可複選），再選你住的行政區。</p>
+      <div class="me-chips" id="me-personas">
+        {
+          PERSONAS.map((p) => (
+            <button type="button" class="me-chip" data-persona={p.id} aria-pressed="false">
+              <span aria-hidden="true">{p.icon}</span>
+              {p.label}
+            </button>
+          ))
+        }
+      </div>
+      <p class="me-hint">住在哪一區？</p>
+      <div class="me-chips me-districts" id="me-districts">
+        {
+          districts.map((d) => (
+            <button type="button" class="me-chip" data-district={d.name} aria-pressed="false">
+              {d.name}
+            </button>
+          ))
+        }
+      </div>
+      <div class="me-actions">
+        <button type="button" class="btn btn-primary" id="me-go" disabled>看我的臺北 →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="share" class="share" hidden role="dialog" aria-modal="true" aria-label="分享圖卡">
+    <div class="share-box">
+      <button class="card-close" id="share-close" aria-label="關閉">×</button>
+      <img id="share-img" alt="我的臺北分享圖卡" />
+      <div class="me-actions">
+        <button type="button" class="btn btn-primary" id="share-go">分享圖卡</button>
+        <a class="btn" id="share-save" download="my-taipei.png">下載圖片</a>
+        <button type="button" class="btn" id="share-link">複製連結</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>出資者：{SITE.sponsor}・{SITE.adLabel}</span>
+    <span>地形 AWS Terrain Tiles・地圖 © OpenStreetMap 貢獻者・YouBike、都更案件、地段圖 臺北市資料大平台・標「示意」者為示意位置</span>
+  </footer>
+
+  <div id="loading" class="loading"><div class="loading-ring"></div><p>正在搭建臺北盆地…</p></div>
+
+  <!-- shown when 3D cannot run (no WebGL, very old phones): the same content as plain text -->
+  <section id="fallback" class="fallback" hidden>
+    <div class="page-wrap">
+      <h1>{SITE.tagline}</h1>
+      <p>你的瀏覽器無法顯示 3D 城市，以下是同樣的內容。</p>
+      {
+        groups.map(([title, list]) => (
+          <section>
+            <h2>
+              {title} {list.length}
+            </h2>
+            <ul class="policy-grid">
+              {list.map((p) => (
+                <li>
+                  <a href={p.url} style={`--c:${p.stage.color}`}>
+                    <small>{p.when}</small>
+                    <b>{p.name}</b>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      }
+    </div>
+  </section>
+
+  <noscript>
+    <section class="fallback">
+      <div class="page-wrap">
+        <h1>{SITE.tagline}</h1>
+        <ul>
+          {
+            policies.map((p) => (
+              <li>
+                <a href={p.url}>{p.name}</a>（{p.stage.zh}）
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+  </noscript>
+
+  <script>
+    import "../styles/app.css";
+    import { boot } from "../scene/app.js";
+    boot();
+  </script>
+</Base>

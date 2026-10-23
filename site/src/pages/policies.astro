@@ -1,0 +1,32 @@
+---
+import Page from "../layouts/Page.astro";
+import { groups, policies } from "../lib/policies.js";
+import { SITE } from "../config.js";
+---
+
+<Page title="全部政策" description={`${policies.length} 項政策：做到了、正在做、接下來。每一項都附官方來源。`}>
+  <section class="policy-hero">
+    <h1>每一個願景，都蓋在做到的事上。</h1>
+    <p class="when">依公開資料標示每項政策的狀態（查核日 {SITE.dataDate}）。點進去看上任那天和現在的差別，以及官方來源。</p>
+  </section>
+  {
+    groups.map(([title, list]) => (
+      <section>
+        <h2>
+          {title} {list.length}
+        </h2>
+        <ul class="policy-grid">
+          {list.map((p) => (
+            <li>
+              <a href={p.url} style={`--c:${p.stage.color}`}>
+                <small>{p.when}</small>
+                <b>{p.name}</b>
+                <small>{p.after.length > 46 ? p.after.slice(0, 46) + "…" : p.after}</small>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+</Page>

@@ -1,0 +1,90 @@
+---
+import Page from "../../layouts/Page.astro";
+import { policies } from "../../lib/policies.js";
+import { SITE } from "../../config.js";
+
+export function getStaticPaths() {
+  return policies.map((p) => ({ params: { id: p.id }, props: { p } }));
+}
+const { p } = Astro.props;
+const pageUrl = new URL(p.url, Astro.site).href;
+const shareText = `${p.name}｜${p.stage.zh}：${p.after}`;
+const related = policies.filter((q) => q.status === p.status && q.id !== p.id).slice(0, 4);
+const isPlanned = p.status === "planned";
+---
+
+<Page title={p.name} description={`${p.stage.zh}・${p.when}｜${p.after}`} image={p.og}>
+  <article class="policy-hero" style={`--c:${p.stage.color}`}>
+    <span class="chip-stage">{p.stage.zh}・{p.stage.note}</span>
+    {p.approx && <span class="chip-note">{p.approxLabel || "位置示意"}</span>}
+    <h1>{p.name}</h1>
+    <p class="when">{p.when}</p>
+
+    <div class="ba-grid">
+      <section>
+        <h2>{isPlanned ? "現況" : "上任那天"}</h2>
+        <p>{p.before}</p>
+      </section>
+      <section class="now">
+        <h2>{isPlanned ? "接下來" : "現在"}</h2>
+        <p>{p.after}</p>
+      </section>
+    </div>
+
+    {p.numbers && <p class="numbers">{p.numbers}</p>}
+    <p class="caveat"><b>怎麼讀：</b>{p.caveat}</p>
+
+    <h2>資料來源</h2>
+    <ul class="sources-list">
+      {
+        p.sources.map((s) => (
+          <li>
+            <a href={s.url} target="_blank" rel="noopener">
+              {s.title}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="share-row">
+      <a class="btn-city" href={`/?focus=${p.id}`}>在 3D 城市裡看 →</a>
+      <a class="line" href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(pageUrl)}`} target="_blank" rel="noopener">分享到 LINE</a>
+      <a class="fb" href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(pageUrl)}`} target="_blank" rel="noopener">分享到 Facebook</a>
+      <button type="button" data-copy={pageUrl} data-text={shareText}>複製連結</button>
+    </div>
+  </article>
+
+  {
+    related.length > 0 && (
+      <section>
+        <h2>同樣{p.stage.zh}</h2>
+        <ul class="policy-grid">
+          {related.map((q) => (
+            <li>
+              <a href={q.url} style={`--c:${q.stage.color}`}>
+                <small>{q.when}</small>
+                <b>{q.name}</b>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <script>
+    document.querySelectorAll("[data-copy]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const url = b.dataset.copy;
+        try {
+          if (navigator.share) await navigator.share({ title: document.title, text: b.dataset.text, url });
+          else await navigator.clipboard.writeText(url);
+          b.textContent = "已複製連結";
+        } catch {
+          /* the person closed the share sheet */
+        }
+      }),
+    );
+  </script>
+</Page>

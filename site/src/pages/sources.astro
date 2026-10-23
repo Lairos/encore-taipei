@@ -1,0 +1,64 @@
+---
+import Page from "../layouts/Page.astro";
+import { policies } from "../lib/policies.js";
+import { SITE } from "../config.js";
+
+// every distinct source, with the policies that cite it
+const bySource = new Map();
+for (const p of policies)
+  for (const s of p.sources) {
+    if (!bySource.has(s.url)) bySource.set(s.url, { ...s, cited: [] });
+    bySource.get(s.url).cited.push(p);
+  }
+const sources = [...bySource.values()];
+const DATA = [
+  ["地形", "AWS Terrain Tiles（SRTM 等）", "https://registry.opendata.aws/terrain-tiles/"],
+  ["市界、河川、道路、學校", "OpenStreetMap 貢獻者（ODbL）", "https://www.openstreetmap.org/copyright"],
+  ["YouBike 站點", "臺北市資料大平台", "https://data.taipei/"],
+  ["都更案件", "臺北市都市更新處 自行劃定更新單元查詢", "https://data.gov.tw/dataset/145802"],
+  ["地段範圍", "臺北市地政局 數值地籍地段圖", "https://data.gov.tw/dataset/157685"],
+];
+---
+
+<Page title="資料來源" description="網站上每一項政策與地圖資料的來源。">
+  <section class="policy-hero">
+    <h1>資料來源</h1>
+    <p class="when">政策內容查核日 {SITE.dataDate}。官方新聞稿反映發布機關說法；媒體與政黨來源已標示，相關估計不等同獨立成效評估。</p>
+  </section>
+  <h2>政策來源 {sources.length}</h2>
+  <ol class="sources-list">
+    {
+      sources.map((s) => (
+        <li>
+          <a href={s.url} target="_blank" rel="noopener">
+            {s.title}
+          </a>
+          <br />
+          <small>
+            引用於：
+            {s.cited.map((p, i) => (
+              <>
+                {i > 0 && "、"}
+                <a href={p.url}>{p.name}</a>
+              </>
+            ))}
+          </small>
+        </li>
+      ))
+    }
+  </ol>
+  <h2>地圖資料</h2>
+  <ul class="sources-list">
+    {
+      DATA.map(([what, who, url]) => (
+        <li>
+          {what}：
+          <a href={url} target="_blank" rel="noopener">
+            {who}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="caveat">一般建築、行道樹與車流為程式生成的示意；東環段路線、北士科建物、松山 AI 園區分區依公開描述繪製，頁面上已標示「位置示意」。</p>
+</Page>

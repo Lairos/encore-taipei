@@ -1,0 +1,24 @@
+{
+  "name": "taipei-encore-site",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "data": "node scripts/fetch-data.mjs && node scripts/build-data.mjs && node scripts/build-renewal.mjs && node scripts/build-districts.mjs",
+    "deploy": "astro build && wrangler pages deploy dist --project-name taipei-encore --branch main"
+  },
+  "dependencies": {
+    "astro": "^7.4.2",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@astrojs/sitemap": "^3.7.4",
+    "@resvg/resvg-js": "^2.6.2",
+    "pngjs": "^7.0.0",
+    "satori": "^0.63.2",
+    "wrangler": "^4.152.0"
+  }
+}

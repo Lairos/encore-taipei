@@ -1,0 +1,33 @@
+---
+// Light content pages (policy pages, index, sources): brand header, footer with the sponsor disclosure.
+import Base from "./Base.astro";
+import { SITE } from "../config.js";
+const { title, description, image } = Astro.props;
+---
+
+<Base title={title} description={description} image={image}>
+  <header class="site-head">
+    <div class="page-wrap">
+      <a class="lockup" href="/" aria-label={`${SITE.campaign} ${SITE.short} 首頁`}>
+        <span class="lockup-dot" aria-hidden="true"></span>
+        <span class="lockup-name">{SITE.campaign}</span>
+        <span class="lockup-tag">{SITE.campaignEn}</span>
+      </a>
+      <nav aria-label="網站">
+        <a href="/policies/">全部政策</a>
+        <a href="/sources/" class="hide-sm">資料來源</a>
+        <a class="btn-city" href="/">走進 3D 城市 →</a>
+      </nav>
+    </div>
+  </header>
+  <main class="page-wrap">
+    <slot />
+  </main>
+  <footer class="page-wrap site-foot">
+    <p><span class="sponsor">出資者：{SITE.sponsor}</span>・{SITE.adLabel}</p>
+    <p>
+      政策內容依公開資料整理（查核日 {SITE.dataDate}），各項均附官方來源；「已實施」指任內上路或完成的里程碑，不直接等同因果成效。地形 AWS Terrain Tiles・地圖 ©
+      OpenStreetMap 貢獻者・YouBike、都更案件、地段圖 臺北市資料大平台。
+    </p>
+  </footer>
+</Base>

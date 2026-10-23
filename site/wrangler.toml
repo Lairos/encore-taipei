@@ -1,0 +1,4 @@
+# Cloudflare Pages: `npm run deploy` builds and uploads dist/ (run `npx wrangler login` once first)
+name = "taipei-encore"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-01"
