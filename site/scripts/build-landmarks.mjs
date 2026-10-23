@@ -270,6 +270,8 @@ for (const e of (await json("icons.json")).elements) {
 
 // ---------- parks (type 0 lawn, 1 plaza: paved with trees round the edge) ----------
 const PLAZAS = new Set([1506269, 237121375]); // 中正紀念公園 (自由廣場) and 艋舺公園 are mostly paved
+const NAMED = { 1227733215: "大安區" }; // parks that stand for their district get a map label
+const places = [];
 for (const e of (await json("parks.json")).elements) {
   const rings = e.type === "way" ? [e.geometry] : outerRings(e.members);
   for (const g of rings) {
@@ -277,6 +279,7 @@ for (const e of (await json("parks.json")).elements) {
     const ring = closedRing(g, 0.03);
     if (ring.length < 3 || Math.abs(area(ring)) < 0.4) continue; // < 0.4 ha
     parks.push([PLAZAS.has(e.id) ? 1 : 0, ...flat(ring)]);
+    if (NAMED[e.id]) places.push({ name: e.tags.name, district: NAMED[e.id], at: centroid(ring) });
   }
 }
 
@@ -299,6 +302,7 @@ const gondola = {
 const lm = {
   icons,
   parks,
+  places,
   gondola,
   dome: { ...ellipse(ways.get(442195153)), outline: flat(ways.get(442195153)) },
   t101: { center: centroid(ways.get(1159328965)) },

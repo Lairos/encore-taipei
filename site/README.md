@@ -41,6 +41,7 @@ npm run deploy
 - 「我的臺北」身分與對應政策：`src/scene/persona-data.js`
 - 分享預覽圖版面：`src/lib/og.js`
 - 我的臺北分享圖卡：`src/scene/persona.js` 的 `makeCard()`
+- 模擬城市視角的地圖標示（拉遠顯示行政區、拉近顯示代表建築，點了會飛過去）：`src/scene/labels.js`；建築名稱來自 `scripts/build-landmarks.mjs` 的 `ICONS`
 
 ## 更新資料
 

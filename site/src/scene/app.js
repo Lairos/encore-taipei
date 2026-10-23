@@ -7,6 +7,7 @@ import { createPost } from "./post.js";
 import { createOpening, GAME_FOV_RATIO } from "./opening.js";
 import { createUI } from "./ui.js";
 import { createPersona } from "./persona.js";
+import { createLabels } from "./labels.js";
 import { POLICIES } from "./policies.js";
 
 function webglReady() {
@@ -153,6 +154,10 @@ async function start() {
     };
   }
 
+  // fly so the view spans `span` world units across its narrower side, whatever the lens
+  const flyToSpan = (p, span) => flyTo(p, span / (2 * Math.tan(THREE.MathUtils.degToRad(baseFov()) / 2) * Math.min(1, camera.aspect)));
+  const labels = createLabels({ T: world.T, root: document.getElementById("labels"), onPick: flyToSpan });
+
   // change the lens while keeping the framing (dolly zoom around the orbit target)
   function setFov(fov) {
     const k = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.tan(THREE.MathUtils.degToRad(fov) / 2);
@@ -171,7 +176,8 @@ async function start() {
       const xs = d.outline.map((p) => p[0]),
         zs = d.outline.map((p) => p[1]);
       const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
-      flyTo(new THREE.Vector3(d.center[0], world.T.groundY(d.center[0], d.center[1]), d.center[1]), Math.max(24, span * 0.9));
+      // the built-up middle of the district, where its name is drawn (not the mountains of 北投 or 士林)
+      flyTo(labels.districtPoint(d.name) || new THREE.Vector3(d.center[0], world.T.groundY(d.center[0], d.center[1]), d.center[1]), Math.max(24, span * 0.9));
     },
     // the current view as an image, for the share card (read straight after a render, while the buffer is intact)
     snapshot() {
@@ -300,6 +306,7 @@ async function start() {
     post.state.curtain = curtain.on;
     post.state.split = curtain.split;
     ui.updatePins(camera, mainDate, curtain.on, curtain.split);
+    labels.update(camera, controls.target, mode === "explore" && style > 0.5, ui.pinRects());
     post.render(dt);
   }
   ui.loaded();

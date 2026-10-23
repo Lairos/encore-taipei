@@ -120,9 +120,11 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     pins.set(id, { el, anchor, policy, small: el.querySelector("small") });
   }
   const v = new THREE.Vector3();
+  const pinRects = [];
   function updatePins(camera, dateRight, curtainOn, split) {
     const w = innerWidth,
       h = innerHeight;
+    pinRects.length = 0;
     for (const pin of pins.values()) {
       v.copy(pin.anchor).project(camera);
       const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
@@ -131,6 +133,9 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
       const x = (v.x * 0.5 + 0.5) * w,
         y = (-v.y * 0.5 + 0.5) * h;
       pin.el.style.transform = `translate(${x}px, ${y - 14}px) translate(-50%, -100%)`;
+      // size measured once per theme (fonts differ), so the map labels can keep clear of the pins
+      if (!pin.w) [pin.w, pin.h] = [pin.el.offsetWidth, pin.el.offsetHeight];
+      pinRects.push([x - pin.w / 2, y - 14 - pin.h, x + pin.w / 2, y]);
       const d = curtainOn && x / w < split ? DATES.inauguration : dateRight;
       const st = stageAt(pin.policy, d);
       pin.el.style.setProperty("--c", cssc(st));
@@ -197,6 +202,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     caption,
     addPin,
     updatePins,
+    pinRects: () => pinRects,
     showPolicy,
     showCustom,
     hideCard,
@@ -208,6 +214,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
       if (game === isGame) return;
       isGame = game;
       body.classList.toggle("is-game", game);
+      for (const pin of pins.values()) pin.w = 0;
       styleBtn.textContent = game ? "☾ 寫實夜景" : "▦ 模擬城市";
       styleBtn.setAttribute("aria-label", game ? "切換成寫實夜景" : "切換成模擬城市風格");
     },

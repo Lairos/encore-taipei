@@ -243,6 +243,7 @@ body:not(.is-opening) .skip {
 }
 body.is-outro .hud,
 body.is-outro .pins,
+body.is-outro .labels,
 body.is-outro .list-toggle {
   opacity: 0;
   pointer-events: none;
@@ -371,7 +372,8 @@ body.is-outro .list-toggle {
 }
 body.is-opening .hud,
 body.is-opening .list-toggle,
-body.is-opening .pins {
+body.is-opening .pins,
+body.is-opening .labels {
   opacity: 0;
   pointer-events: none;
 }
@@ -501,6 +503,70 @@ body.is-opening .hud {
   font-family: var(--serif);
   font-size: 20px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- map labels (game city): district names far out, building names close in ---------- */
+.labels {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.labels.on {
+  opacity: 1;
+}
+.labels.on .label {
+  pointer-events: auto;
+}
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  padding: 0;
+  white-space: nowrap;
+  font-family: "Huninn", var(--sans);
+  line-height: 1.2;
+  will-change: transform, opacity;
+  transition: opacity 0.25s ease;
+}
+.label-district {
+  padding: 2px 6px;
+  font-size: 24px;
+  letter-spacing: 0.08em;
+  color: #fff;
+  -webkit-text-stroke: 6px #1d3557;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(29, 53, 87, 0.28);
+}
+.label-place {
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1d3557;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 0 rgba(31, 42, 55, 0.16);
+}
+/* stem down to the building */
+.label-place::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: rgba(255, 255, 255, 0.94);
+}
+.label:hover {
+  filter: brightness(1.06);
+}
+.label:focus-visible {
+  outline: 2px solid #ffd24d;
+  outline-offset: 2px;
 }
 
 /* ---------- pins ---------- */
@@ -829,6 +895,14 @@ body.is-opening .hud {
   .pin {
     font-size: 12px;
     padding: 4px 9px 4px 6px;
+  }
+  .label-district {
+    font-size: 19px;
+    -webkit-text-stroke-width: 5px;
+  }
+  .label-place {
+    font-size: 12px;
+    padding: 2px 7px;
   }
   .curtain-label {
     top: max(118px, calc(env(safe-area-inset-top) + 100px));
@@ -1208,6 +1282,7 @@ body.no-3d {
 body.no-3d #stage,
 body.no-3d .hud,
 body.no-3d .pins,
+body.no-3d .labels,
 body.no-3d .counter,
 body.no-3d .skip,
 body.no-3d .status-bar,
