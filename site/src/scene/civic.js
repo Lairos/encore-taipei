@@ -1,7 +1,7 @@
 // Policies without a construction site of their own, drawn the SimCity way: oversized, readable props, each changing
 // with the date like the other layers (起點 → 做到了／正在做 → 接下來).
 //   全市政策   生育補助, 育兒減工時, 托育補助, 敬老卡, AI 教育, 國中小午餐 and CiviClaw have no single place, so they
-//              stand on a half ring of pedestals on the plaza east of City Hall, each rising on the day it starts
+//              hover in a ring over City Hall, each rising from its roof on the day it starts
 //   大街廓都更 the two demonstration sites — today's ground, then blueprint towers with public facilities
 //   大安路人行道 the real works site — narrow pavement → works moving block by block → wide pavement (2027.02)
 // The school campuses are part of the city (buildSchoolGrounds). Props only show in the game city.
@@ -122,16 +122,18 @@ function blueprintMat() {
 }
 const glowToon = (color, k = 0.5) => toon(color, { emissive: color, emissiveIntensity: k });
 
-// ---------- City Hall: the citywide programmes on a half ring of pedestals ----------
-// The policies with no single place of their own (`hub` in policies.js) stand on a plaza east of City Hall, in the
-// order they began from the south end of the ring (by 臺北101) to the north, where the opening's camera sees the
-// latest rise; each pedestal rises on the day its policy starts (illustrative).
+// ---------- City Hall: the citywide programmes on a ring of pads floating over it ----------
+// The policies with no single place of their own (`hub` in policies.js) hover in a ring over City Hall, so the city
+// round it stays as it is. They go round in the order they began, from the south (by 臺北101) through the east and
+// north to the south-west, where the opening's camera sees the latest rise; each pad rises from the roof on the day
+// its policy starts (illustrative).
 function cityHall(T) {
   const ic = T.landmarks.icons.find((i) => i.name === "臺北市政府");
   const [x, z] = centroidOf(ring2(ic.outline));
   return { x, z, top: T.groundY(x, z) + ic.wall };
 }
-const HUB_R = 2.6; // ring radius round City Hall's centre; the roads west and north of it stay clear
+const HUB_R = 1.35, // ring radius round City Hall's centre, about the building's own reach
+  HUB_LIFT = 1.0; // how far above the roof the pads float
 export function hubLayout(T) {
   const ch = cityHall(T);
   const ids = POLICIES.filter((p) => p.hub)
@@ -139,74 +141,48 @@ export function hubLayout(T) {
     .map((p) => p.id);
   const slots = new Map(
     ids.map((id, i) => {
-      const a = THREE.MathUtils.degToRad(80 - (160 * i) / Math.max(1, ids.length - 1));
-      const x = ch.x + Math.cos(a) * HUB_R,
-        z = ch.z + Math.sin(a) * HUB_R;
-      return [id, { x, z, y: T.groundY(x, z), a, i }];
+      const a = THREE.MathUtils.degToRad(90 - (360 * i) / ids.length);
+      return [id, { x: ch.x + Math.cos(a) * HUB_R, z: ch.z + Math.sin(a) * HUB_R, y: ch.top + HUB_LIFT, a, i }];
     }),
   );
-  return { ...ch, ids, slots, anchor: new THREE.Vector3(ch.x + 0.9, ch.top + 1.7, ch.z) };
+  return { ...ch, ids, slots, anchor: new THREE.Vector3(ch.x, ch.top + HUB_LIFT + 2.2, ch.z) };
 }
 
-// the plaza under the ring: paving with a gold inlay along the pedestals, kept clear of the city blocks, and people
-// strolling past each pedestal once it is up
-export function buildCivicPlaza(T) {
-  const hub = hubLayout(T);
-  const y = T.groundY(hub.x, hub.z);
-  const R = HUB_R + 0.8;
-  const ground = batch();
-  ground.add(new THREE.CircleGeometry(R, 48, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2).translate(hub.x, y + 0.016, hub.z), "#efe6d4");
-  ground.add(new THREE.RingGeometry(HUB_R - 0.04, HUB_R + 0.04, 64, 1, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2).translate(hub.x, y + 0.02, hub.z), "#e8b84a");
-  // the marked spot of each pedestal, there before it rises
-  for (const s of hub.slots.values()) ground.add(new THREE.CircleGeometry(0.37, 28).rotateX(-Math.PI / 2).translate(s.x, s.y + 0.024, s.z), "#d8cfbd");
-  const g = ground.build();
-  g.traverse((o) => o.isMesh && (o.castShadow = false));
-  const exclusions = [];
-  for (let dx = 0; dx <= R; dx += 0.7)
-    for (let dz = -R; dz <= R; dz += 0.7) if (Math.hypot(dx, dz) <= R) exclusions.push({ x: hub.x + dx, z: hub.z + dz, r: 0.55 });
-  // a walk in front of each pair of neighbouring pedestals, busy from when the later of the two went up
-  const at = (a, r) => [hub.x + Math.cos(a) * r, hub.z + Math.sin(a) * r];
-  const byId = Object.fromEntries(POLICIES.map((p) => [p.id, p]));
-  const crowd = [];
-  for (let i = 0; i + 1 < hub.ids.length; i++) {
-    const s0 = hub.slots.get(hub.ids[i]),
-      s1 = hub.slots.get(hub.ids[i + 1]);
-    crowd.push({ walks: [[...at(s0.a, HUB_R + 0.5), ...at(s1.a, HUB_R + 0.5)]], n: 5, from: Math.max(byId[hub.ids[i]].event, byId[hub.ids[i + 1]].event), lift: 0.016 });
-  }
-  return { group: g, exclusions, crowd, hub: { anchor: hub.anchor, ids: hub.ids } };
-}
-
-// a pedestal at the policy's place in the ring (its marked spot is part of the plaza): the stand rises when the
-// policy starts with its token, which hovers and slowly turns; the rim takes the policy's stage colour
+// a pad at the policy's place in the ring: it rises from the roof when the policy starts, carrying its token, which
+// hovers and slowly turns; the rim takes the policy's stage colour
 function pedestal(T, p) {
-  const s = hubLayout(T).slots.get(p.id);
-  const g = site(T, s.x, s.z);
+  const hub = hubLayout(T);
+  const s = hub.slots.get(p.id);
+  const g = new THREE.Group();
+  g.position.set(s.x, hub.top, s.z);
   const sb = batch();
-  sb.add(new THREE.CylinderGeometry(0.33, 0.38, 0.2, 28).translate(0, 0.1, 0), "#fbf7ee");
-  sb.add(new THREE.TorusGeometry(0.34, 0.03, 8, 40).rotateX(Math.PI / 2).translate(0, 0.2, 0), STAGE[p.status].color);
-  const stand = sb.build();
+  sb.add(new THREE.CylinderGeometry(0.3, 0.22, 0.06, 28).translate(0, 0.03, 0), "#fbf7ee");
+  sb.add(new THREE.TorusGeometry(0.3, 0.028, 8, 40).rotateX(Math.PI / 2).translate(0, 0.06, 0), STAGE[p.status].color);
+  const pad = new THREE.Group();
   const token = new THREE.Group();
-  g.add(stand, token);
+  pad.add(sb.build(), token);
+  g.add(pad);
   const phase = s.a * 3;
   return {
     group: g,
+    pad,
     token,
-    anchor: new THREE.Vector3(s.x, s.y + (s.i % 2 ? 2.25 : 1.3), s.z), // staggered so neighbouring pins clear each other
+    anchor: new THREE.Vector3(s.x, s.y + (s.i % 2 ? 1.55 : 0.95), s.z), // staggered so neighbouring pins clear each other
     // returns how far it has risen (0..1)
     update(d, flash) {
       gameOnly(g);
-      const k = smooth(p.event - 0.03, p.event + 0.08, d);
-      stand.scale.set(1, Math.max(0.001, k), 1);
-      token.visible = k > 0.5;
+      const k = smooth(p.event - 0.03, p.event + 0.1, d);
+      pad.visible = k > 0.01;
+      pad.position.y = (s.y - hub.top) * k;
+      pad.scale.setScalar(Math.max(0.001, k) * 1.15 * (1 + flash * 0.4));
       const t = U.uTime.value;
-      token.position.y = 0.32 + Math.sin(t * 1.5 + phase) * 0.03;
+      token.position.y = 0.12 + Math.sin(t * 1.5 + phase) * 0.03;
       token.rotation.y = t * 0.5 + phase;
-      token.scale.setScalar(Math.max(0.001, smooth(0.5, 1, k)) * 1.3 * (1 + flash * 0.4));
       return k;
     },
   };
 }
-// the layer for a pedestal, its token's still parts baked; extra(k, d) animates what was kept
+// the layer for a pad, its token's still parts baked; extra(k, d) animates what was kept
 function onPedestal(ped, extra) {
   bake(ped.token);
   return { group: ped.group, anchor: ped.anchor, exclusions: [], update: extra ? (d, flash) => extra(ped.update(d, flash), d, flash) : ped.update };
@@ -265,12 +241,12 @@ export function buildWorktime(T, p) {
   const family = (dx, dz) => {
     const f = new THREE.Group();
     f.add(person("#2e6be6", 0.11).translateX(dx), person("#ff8a3d", 0.11).translateX(dx + 0.08), person("#ffd23f", 0.08).translateX(dx + 0.04).translateZ(0.07));
-    f.position.set(0, 0.2, dz);
+    f.position.set(0, 0.06, dz);
     return bake(f);
   };
   const pilot = family(-0.2, 0.12),
     expand = family(0.05, -0.18);
-  ped.group.add(pilot, expand);
+  ped.pad.add(pilot, expand);
   const EXPAND = 2027.0;
   return onPedestal(ped, (k, d) => {
     pilot.visible = k > 0.99;

@@ -11,7 +11,7 @@ import { buildGameTerrain, buildGameWater, buildGameCity, buildTrees, buildStree
 import { buildIcons } from "./icons.js";
 import { buildParks } from "./parks.js";
 import { buildPeople } from "./people.js";
-import { buildCivicPlaza, buildSchoolGrounds } from "./civic.js";
+import { hubLayout, buildSchoolGrounds } from "./civic.js";
 import { POLICIES } from "./policies.js";
 
 const WAVE_MAX = 260; // radius that covers the whole slab from City Hall
@@ -36,12 +36,11 @@ export async function createWorld(scene, { quality }) {
     layers.set(p.id, { policy: p, ...l });
     scene.add(l.group);
   }
-  // the plaza of citywide policies by City Hall, and the school campuses (game city only)
-  const plaza = buildCivicPlaza(T);
+  // the school campuses (game city only)
   const schools = buildSchoolGrounds(T);
   // the standard city fabric fills everything but the landmarks, the policy sites, the schools and the parks
   const parks = buildParks(T);
-  const exclusions = [...anchors.exclusions, ...icons.exclusions, ...plaza.exclusions, ...schools.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions)];
+  const exclusions = [...anchors.exclusions, ...icons.exclusions, ...schools.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions)];
   const items = planCity(T, { quality, exclusions, open: parks.open });
   const city = buildCity(items);
   scene.add(city.mesh);
@@ -54,10 +53,10 @@ export async function createWorld(scene, { quality }) {
   const trees = buildTrees(T, items, quality, parks, icons.exclusions);
   const streets = buildStreets(T);
   const traffic = buildTraffic(T, streets.polylines, quality);
-  const crowds = [...plaza.crowd, ...[...layers.values()].flatMap((l) => l.crowd || [])];
+  const crowds = [...layers.values()].flatMap((l) => l.crowd || []);
   const people = buildPeople(T, { polylines: streets.polylines, parks, exclusions, crowds, quality });
   const clouds = buildCloudShadows(T);
-  game.add(plaza.group, schools.group, trees.group, streets.mesh, traffic.mesh, people.mesh, clouds.group);
+  game.add(schools.group, trees.group, streets.mesh, traffic.mesh, people.mesh, clouds.group);
   scene.add(game);
   const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads];
 
@@ -158,7 +157,7 @@ export async function createWorld(scene, { quality }) {
     showDistrict,
     city,
     counts: { buildings: items.length, trees: trees.count, people: people.count },
-    hub: plaza.hub, // where the citywide policies stand: { anchor, ids }
+    hub: (({ anchor, ids }) => ({ anchor, ids }))(hubLayout(T)), // the ring of citywide policies over City Hall
     tick,
     setDate,
     setStyle,

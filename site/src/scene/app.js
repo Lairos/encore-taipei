@@ -121,8 +121,8 @@ async function start() {
 
   const CURTAIN_VIEW = new THREE.Vector3(2, 3, 18);
   const FLY_DIST = { dome: 9, gongguan: 5, nvidia: 11, autobus: 12, songshan: 34, eastring: 46, renewal: 34, youbike: 40 };
-  const HUB_DIST = 13, // the whole ring of citywide policies by City Hall
-    PEDESTAL_DIST = 7; // one pedestal with its neighbours, close enough for each to have its own pin
+  const HUB_DIST = 9, // the whole ring of citywide policies over City Hall
+    PEDESTAL_DIST = 6; // one pad with its neighbours, close enough for each to have its own pin
   // the ring is looked at from the north-west: City Hall in front, 臺北101 behind rather than in the way
   const HUB_VIEW = new THREE.Vector3(-0.45, 0.65, -0.6);
   for (const [id, l] of world.layers) if (l.anchor) ui.addPin(id, l.anchor, l.policy);
@@ -147,7 +147,7 @@ async function start() {
     ui.showOutro(false);
     ui.showHub(mainDate);
     const phone = innerWidth <= 760;
-    flyTo(world.hub.anchor, HUB_DIST, phone ? 0.22 : 0, phone ? 0 : 0.17, HUB_VIEW);
+    flyTo(world.hub.anchor, HUB_DIST, phone ? 0.32 : 0, phone ? 0 : 0.17, HUB_VIEW); // the ring is wider than a single place
   }
 
   function setCurtain(on) {

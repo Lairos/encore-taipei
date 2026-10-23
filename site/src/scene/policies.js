@@ -1,10 +1,10 @@
 // Policy content for the prototype, taken from 「蔣萬安臺北市長任內施政與2026連任政策完整報告」(查核日 2026-10-23).
 // status: done 已實施 / ongoing 推動中 / planned 已宣布規劃. `event` is the decimal-year moment the scene changes.
 // `approx` marks positions or footprints drawn for illustration only; `hub` marks the citywide policies with no single
-// place of their own, which stand on the pedestals by City Hall (civic.js).
+// place of their own, which hover in a ring over City Hall (civic.js).
 import { ymd } from "./shared.js";
 
-const AT_HALL = "全市適用，展台在市府廣場（示意）";
+const AT_HALL = "全市適用，標在市政府上空（示意）";
 
 const S = {
   1: ["生育補助金額常見問答｜臺北市民政局", "https://ca.gov.taipei/News_Content.aspx?n=59F2E04A34FDA3E8&s=DF5CE67EA92183BC&sms=87415A8B9CE81B16"],

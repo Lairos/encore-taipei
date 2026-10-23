@@ -119,7 +119,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onHub, onSkip, on
     pinsEl.appendChild(el);
     pins.set(id, { el, anchor, policy, small: el.querySelector("small") });
   }
-  // the citywide policies by City Hall share one pin while their pedestals are too close on screen to tell apart
+  // the citywide policies over City Hall share one pin while their pads are too close on screen to tell apart
   let hub = null;
   function addHub(anchor, ids) {
     const el = document.createElement("button");
@@ -129,7 +129,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onHub, onSkip, on
     pinsEl.appendChild(el);
     hub = { el, anchor, ids, w: 0, h: 0 };
   }
-  const HUB_GAP = 120; // px between neighbouring pedestals before each gets its own pin
+  const HUB_GAP = 120; // px between neighbouring pads before each gets its own pin
   const v = new THREE.Vector3();
   const pinRects = [];
   // the interface panels pins and map labels keep clear of (re-measured twice a second: layout reads are not free)
@@ -156,7 +156,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onHub, onSkip, on
     }
     pinRects.length = 0;
     pinRects.push(...panelRects);
-    // the City Hall pin first: grouped while the pedestals crowd together, unless one of them is open in the card
+    // the City Hall pin first: grouped while the pads crowd together, unless one of them is open in the card
     let grouped = false;
     if (hub) {
       let gap = Infinity,
@@ -240,16 +240,16 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onHub, onSkip, on
     cardBody.querySelector(".card-back")?.addEventListener("click", () => onHub());
     card.hidden = false;
   }
-  // the City Hall card: the citywide policies in the order their pedestals stand, each opening its own card
+  // the City Hall card: the citywide policies in the order they began, each opening its own card
   function showHub(d) {
     if (!hub) return;
     for (const pin of pins.values()) pin.el.classList.remove("active");
     const list = hub.ids.map((id) => pins.get(id).policy);
     card.style.setProperty("--c", cssc(STAGE.done));
     cardBody.innerHTML = `
-      <span class="chip approx">全市適用，展台在市府廣場（示意）</span>
+      <span class="chip approx">全市適用，標在市政府上空（示意）</span>
       <h2>臺北市政府・全市政策</h2>
-      <p class="when">沒有單一地點的政策，依開始時間排在市府廣場的展台上；點選查看上任前後與來源</p>
+      <p class="when">沒有單一地點的政策，依開始時間環繞在市政府上空；點選查看上任前後與來源</p>
       <ul class="policy-list hub-list">${list
         .map((p) => {
           const st = stageAt(p, Math.max(d, p.event));

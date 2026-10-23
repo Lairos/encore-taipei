@@ -6,7 +6,7 @@ import { U, DATES, LIGHT_GLSL, mulberry, smooth } from "./shared.js";
 import { project } from "./geo.js";
 import { describeRenewal } from "./policies.js";
 import { ROAD_WIDTH } from "./city.js";
-import { buildBirth, buildElder, buildChildcare, buildWorktime, buildCiviclaw, buildAiEdu, buildLunch, buildUrban5099, buildSidewalk, hubLayout } from "./civic.js";
+import { buildBirth, buildElder, buildChildcare, buildWorktime, buildCiviclaw, buildAiEdu, buildLunch, buildUrban5099, buildSidewalk } from "./civic.js";
 
 const GOLD = new THREE.Color("#ffc56b"),
   CYAN = new THREE.Color("#5fe3ff");
@@ -779,9 +779,7 @@ function buildRenewal(T, p) {
     })
     // and the props of the citywide policies (hospitals, the 大街廓 demonstration sites)
     .concat(T.landmarks.policySites.hospitals.map((h) => ({ c: h.at, r: 1.2 })))
-    .concat(["zhongshan", "nangang"].map((k) => ({ c: centroidOf(ring2(T.landmarks.policySites[k])), r: 1.5 })))
-    // and the plaza of citywide policies east of City Hall
-    .concat([(({ x, z }) => ({ c: [x + 1.6, z], r: 2.4 }))(hubLayout(T))]);
+    .concat(["zhongshan", "nangang"].map((k) => ({ c: centroidOf(ring2(T.landmarks.policySites[k])), r: 1.5 })));
   const inPoly = (x, z, r) => {
     let c = false;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;

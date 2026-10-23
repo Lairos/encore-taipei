@@ -41,7 +41,7 @@ npm run deploy
 - 「我的臺北」身分與對應政策：`src/scene/persona-data.js`
 - 分享預覽圖版面：`src/lib/og.js`
 - 我的臺北分享圖卡：`src/scene/persona.js` 的 `makeCard()`
-- 每項政策在地圖上的時間狀態（上任那天 → 今天 → 2027 → 願景）：有實際工地的在 `src/scene/layers.js`，全市適用、沒有單一地點的政策在 `src/scene/civic.js`：依開始時間排在市府廣場東側半圈的政策展台上，標示「示意」（`policies.js` 裡 `hub: true` 的政策會上展台，點市府的群組標記可展開清單）
+- 每項政策在地圖上的時間狀態（上任那天 → 今天 → 2027 → 願景）：有實際工地的在 `src/scene/layers.js`，全市適用、沒有單一地點的政策在 `src/scene/civic.js`：依開始時間浮在市政府上空的一圈展台上，不佔用周邊街廓，標示「示意」（`policies.js` 裡 `hub: true` 的政策會上展台，點市府的群組標記可展開清單）
 - 模擬城市視角的地圖標示（拉遠顯示行政區、拉近顯示代表建築，點了會飛過去）：`src/scene/labels.js`；建築名稱來自 `scripts/build-landmarks.mjs` 的 `ICONS`
 
 ## 更新資料
