@@ -9,8 +9,9 @@ import { ROAD_WIDTH, hotness } from "./city.js";
 
 // ---------- material patch: appear inside the wave, pop up as it passes, glow on the wave front ----------
 // merged: the geometry holds many buildings in world space, each vertex carrying its building's centre (aCenter) and base (aBase)
-export function morphPatch(mat, { pop = false, merged = false, vertex = "", fragment = "", fragDecl = "", vertDecl = "" } = {}) {
+export function morphPatch(mat, { pop = false, merged = false, vertex = "", fragment = "", fragDecl = "", vertDecl = "", uniforms = {} } = {}) {
   mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
     sh.uniforms.uMorphR = U.uMorphR;
     sh.uniforms.uMorphCenter = U.uMorphCenter;
     sh.uniforms.uTime = U.uTime;
@@ -64,7 +65,7 @@ const ROOFS = ["#d9734e", "#8a929b", "#a0a7ae", "#c8553d", "#8a929b", "#6f8fa6",
 const GLASS = ["#86b9dc", "#6aa3cf", "#9cc7d9", "#7fa8c9"].map(hex);
 
 // ---------- terrain ----------
-export function buildGameTerrain(T, realSurface) {
+export function buildGameTerrain(T, realSurface, parks) {
   const geo = realSurface.geometry.clone();
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
@@ -92,7 +93,16 @@ export function buildGameTerrain(T, realSurface) {
     col.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  const mesh = new THREE.Mesh(geo, morphPatch(new THREE.MeshLambertMaterial({ vertexColors: true })));
+  // parks as lawns and plazas as light paving, from the rasterised park map
+  const mat = morphPatch(new THREE.MeshLambertMaterial({ vertexColors: true }), {
+    uniforms: { uParks: { value: parks.texture }, uParkOrigin: { value: parks.origin }, uParkSize: { value: parks.size } },
+    fragDecl: "uniform sampler2D uParks; uniform vec2 uParkOrigin; uniform vec2 uParkSize;",
+    fragment: /* glsl */ `
+      vec2 pk = texture2D(uParks, (vMorphXZ - uParkOrigin) / uParkSize).rg;
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.76, 0.36), smoothstep(0.2, 0.6, pk.r) * 0.9);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.88, 0.82), smoothstep(0.2, 0.6, pk.g) * 0.85);`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -265,25 +275,12 @@ export function buildGameCity(items, quality) {
 }
 
 // ---------- trees: forested hills and street trees ----------
-export function buildTrees(T, items, quality) {
+export function buildTrees(T, items, quality, parks, keepClear) {
   const rnd = mulberry(5);
   const e = T.extent;
   const step = quality === "high" ? 1.1 : 1.5;
   const occupied = new Set(items.map((b) => `${Math.round(b.x / 0.5)},${Math.round(b.z / 0.5)}`));
-  // real OpenStreetMap buildings: mark their outlines (sampled every ~0.25) and centres so trees stay off them
-  for (const b of T.landmarks.buildings) {
-    let cx = 0,
-      cz = 0;
-    const n = (b.length - 3) / 2;
-    for (let i = 3; i < b.length; i += 2) {
-      const [x0, z0, x1, z1] = [b[i], b[i + 1], b[i + 2] ?? b[3], b[i + 3] ?? b[4]];
-      const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.25);
-      for (let k = 0; k <= steps; k++) occupied.add(`${Math.round((x0 + ((x1 - x0) * k) / steps) / 0.5)},${Math.round((z0 + ((z1 - z0) * k) / steps) / 0.5)}`);
-      cx += x0 / n;
-      cz += z0 / n;
-    }
-    occupied.add(`${Math.round(cx / 0.5)},${Math.round(cz / 0.5)}`);
-  }
+  const clear = (x, z) => keepClear.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
   const broad = [],
     conifer = [],
     street = [];
@@ -323,6 +320,19 @@ export function buildTrees(T, items, quality) {
         }
     }
   }
+  // parks: wooded lawns; plazas only along their edges
+  const ps = quality === "high" ? 0.26 : 0.36;
+  for (let z = e.minZ; z < e.maxZ; z += ps)
+    for (let x = e.minX; x < e.maxX; x += ps) {
+      const px = x + (rnd() - 0.5) * ps * 0.8,
+        pz = z + (rnd() - 0.5) * ps * 0.8;
+      const lawn = parks.lawn(px, pz);
+      if (!lawn && !parks.plaza(px, pz)) continue;
+      const edge = () => [[0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]].some(([dx, dz]) => !parks.plaza(px + dx, pz + dz));
+      if (lawn ? rnd() > 0.42 : !edge() || rnd() > 0.5) continue;
+      if (T.isWater(px, pz) || clear(px, pz)) continue;
+      street.push([px, T.groundY(px, pz) - 0.01, pz, 0.07 + rnd() * 0.05, rnd()]);
+    }
   const greens = ["#6db24f", "#7cc05a", "#5ea447", "#8ac765", "#4f9a46"].map(hex);
   const mat = morphPatch(new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), { pop: true });
   const lod = [];

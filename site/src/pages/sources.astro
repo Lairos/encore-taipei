@@ -13,7 +13,7 @@ for (const p of policies)
 const sources = [...bySource.values()];
 const DATA = [
   ["地形", "AWS Terrain Tiles（SRTM 等）", "https://registry.opendata.aws/terrain-tiles/"],
-  ["市界、河川、道路、學校", "OpenStreetMap 貢獻者（ODbL）", "https://www.openstreetmap.org/copyright"],
+  ["市界、河川、道路、學校、公園、地標建築輪廓", "OpenStreetMap 貢獻者（ODbL）", "https://www.openstreetmap.org/copyright"],
   ["YouBike 站點", "臺北市資料大平台", "https://data.taipei/"],
   ["都更案件", "臺北市都市更新處 自行劃定更新單元查詢", "https://data.gov.tw/dataset/145802"],
   ["地段範圍", "臺北市地政局 數值地籍地段圖", "https://data.gov.tw/dataset/157685"],
@@ -60,5 +60,5 @@ const DATA = [
       ))
     }
   </ul>
-  <p class="caveat">一般建築、行道樹與車流為程式生成的示意；東環段路線、北士科建物、松山 AI 園區分區依公開描述繪製，頁面上已標示「位置示意」。</p>
+  <p class="caveat">一般建築、行道樹與車流為程式生成的示意；各區代表建築放在 OpenStreetMap 的真實位置與輪廓上，屋頂與高度依照片簡化製作。東環段路線、北士科建物、松山 AI 園區分區依公開描述繪製，頁面上已標示「位置示意」。</p>
 </Page>

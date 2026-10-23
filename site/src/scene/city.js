@@ -62,7 +62,7 @@ function roadMask(T) {
 }
 
 // Where the blocks go. Each item: { x, z, y, w, d, h, hm (metres), ang, hot, seed }
-export function planCity(T, { quality, exclusions }) {
+export function planCity(T, { quality, exclusions, open = () => false }) {
   const rnd = mulberry(20261023);
   const spacing = quality === "high" ? 0.46 : 0.6;
   const e = T.extent;
@@ -77,12 +77,13 @@ export function planCity(T, { quality, exclusions }) {
       const h0 = T.elev(px, pz);
       if (h0 > 75) continue;
       const slope = Math.abs(T.elev(px + 0.4, pz) - T.elev(px - 0.4, pz)) + Math.abs(T.elev(px, pz + 0.4) - T.elev(px, pz - 0.4));
-      if (slope > 14 || excluded(px, pz)) continue;
+      if (slope > 14 || excluded(px, pz) || open(px, pz) || open(px + 0.12, pz) || open(px - 0.12, pz) || open(px, pz + 0.12) || open(px, pz - 0.12)) continue;
       const hot = hotness(px, pz);
       if (rnd() > 0.55 + hot * 0.45 - Math.max(0, h0 - 30) * 0.012) continue;
       const r = rnd();
       let hm = r < 0.58 ? 10 + rnd() * 10 : r < 0.9 ? 22 + rnd() * 22 : 48 + rnd() * 60;
       hm *= 0.75 + hot * 0.55;
+      if (exclusions.some((c) => c.low && (px - c.x) ** 2 + (pz - c.z) ** 2 < c.low * c.low)) hm = Math.min(hm, 12 + rnd() * 14);
       const w = 0.16 + rnd() * 0.2 + (hm > 60 ? 0.08 : 0),
         d = 0.16 + rnd() * 0.2 + (hm > 60 ? 0.08 : 0);
       const ang = 0.18 * Math.sin(px * 0.045) + 0.14 * Math.cos(pz * 0.05) + (rnd() < 0.15 ? (rnd() - 0.5) * 0.6 : 0);

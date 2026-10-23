@@ -154,7 +154,6 @@ function buildAnchors(T) {
   const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 0.6, 0.4) }));
   tip.position.set(x, y + 508 * BM, z);
   g.add(tip);
-  // 臺北市政府 now comes from its real footprint (OpenStreetMap), extruded with the other buildings
   return {
     group: g,
     exclusions: [{ x, z, r: 0.6 }],
@@ -475,7 +474,15 @@ function buildRenewal(T, p) {
   const rnd = mulberry(353);
   // [x, z, approved (decimal year), sqrt(area ha), approved flag, case ID]; cases are placed within their land section,
   // so nudge any that land on a landmark (they are certainly not that building) just outside it
-  const blocked = [...T.landmarks.icons.map((i) => ring2(i.outline)), ring2(T.landmarks.dome.outline), ring2(T.landmarks.nvidia.site)];
+  const blocked = [ring2(T.landmarks.dome.outline), ring2(T.landmarks.nvidia.site)];
+  // the representative buildings are small, so a scaffold beside one must also clear it: keep centres a scaffold's half-width away
+  const icons = T.landmarks.icons
+    .filter((i) => i.outline)
+    .map((i) => {
+      const r = ring2(i.outline);
+      const c = centroidOf(r);
+      return { c, r: Math.max(...r.map(([x, z]) => Math.hypot(x - c[0], z - c[1]))) + 0.6 };
+    });
   const inPoly = (x, z, r) => {
     let c = false;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
@@ -490,6 +497,10 @@ function buildRenewal(T, p) {
         for (let k = 0; k < 40 && inPoly(x, z, r); k++) (x += ((x - cx) / d) * 0.1), (z += ((z - cz) / d) * 0.1);
         (x += ((x - cx) / d) * 0.3), (z += ((z - cz) / d) * 0.3);
       }
+    for (const { c: [cx, cz], r } of icons) {
+      const d = Math.hypot(x - cx, z - cz);
+      if (d < r) (x = cx + ((x - cx) / (d || 1)) * r), (z = cz + ((z - cz) / (d || 1)) * r);
+    }
     return [x, z, ...c.slice(2)];
   });
   const n = sites.length;

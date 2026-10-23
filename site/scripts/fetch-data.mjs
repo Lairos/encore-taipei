@@ -64,16 +64,6 @@ await overpass(
   `(nwr["name"~"臺北大巨蛋|台北大巨蛋|臺北101|台北101|臺北市政府|臺北市立動物園|北投士林科技園區|國父紀念館|松山機場|臺北松山機場"](${bb});way["junction"="roundabout"](25.008,121.526,25.021,121.542););out center tags;`,
   "places.json",
 );
-// real building footprints around the key landmarks (信義, 公館, 北士科, 松山機場)
-for (const [name, lat, lon, r] of [
-  ["xinyi", 25.0385, 121.5615, 1300],
-  ["gongguan", 25.0136, 121.5345, 600],
-  ["beishike", 25.1005, 121.5115, 1000],
-  ["airport", 25.0669, 121.552, 1400],
-  ["zhongzheng", 25.039, 121.517, 1000],
-  ["yuanshan", 25.0765, 121.526, 600],
-])
-  await overpass(`(way["building"](around:${r},${lat},${lon});relation["building"](around:${r},${lat},${lon}););out geom;`, `buildings-${name}.json`);
 // 東環段 station anchors: named roads and parks that the MRT bureau uses to describe each station
 await overpass(
   `(way["highway"]["name"~"^(樂群二路|敬業四路|瑞光路|陽光街321巷|舊宗路一段|舊宗路二段|民權東路六段|新湖一路|松山路|松隆路|忠孝東路五段|松仁路|信義路五段|吳興街|新光路二段|南港路一段|成美橋)$"](25.0,121.53,25.09,121.6);way["leisure"="park"]["name"~"洲子二號|大港墘|瑞光公園"](25.06,121.56,25.09,121.6);nwr["railway"="station"]["name"~"^(劍南路|動物園|松山|永春|象山)$"](24.99,121.53,25.09,121.6););out geom tags;`,
@@ -81,8 +71,20 @@ await overpass(
 );
 // landmark outlines: NVIDIA Constellation site (T17/T18), 金仁寶 T16, 臺北大巨蛋, 市政府, 國父紀念館, 臺北101
 await overpass(`way(id:1309916527,1309916528,442195153,142113976,189788192,1159328965);out geom tags;`, "landmark-ways.json");
-// iconic buildings drawn with their own roofs: 中正紀念堂, 國家音樂廳, 國家戲劇院, 臺北車站, 圓山大飯店, 總統府
-await overpass(`(way(id:1052759757,1052759775,1052759776,23641610,25202548);relation(id:206817););out geom;`, "icon-ways.json");
+// representative buildings, a few per district, drawn by hand-made models on their real footprints (see build-landmarks.mjs)
+const ICON_WAYS = [
+  1052759757, 1052759775, 1052759776, 23641610, 25202548, // 中正紀念堂, 國家音樂廳, 國家戲劇院, 臺北車站, 圓山大飯店
+  142113976, 189788192, 155816458, 203799171, 222080307, 244001544, 256190307, 73567706, 558011740, // 市政府 … 南港展覽館二館
+  1004055337, 560811571, 62149553, // 彩虹橋, 關渡大橋, 錦帶橋
+  198401472, 198401478, 198401479, // 艋舺龍山寺
+  281746873, 281746874, 281746876, 281746878, 281746880, 281746881, 281746882, 281746884, 461776386, 461776387, 461776388, // 臺北孔廟
+  1463082589, 1462829501, // 大龍峒保安宮
+];
+await overpass(`(way(id:${ICON_WAYS.join(",")});relation(id:206817);node(id:5121602758););out geom;`, "icons.json"); // 206817 總統府, 5121602758 美麗華摩天輪
+// 貓空纜車: the cable line (its vertices are the towers) and its stations
+await overpass(`(way(id:71266575);node["aerialway"="station"](24.96,121.56,25.0,121.6););out geom;`, "gondola.json");
+// parks, the 故宮 grounds and 艋舺公園: open ground in the city (no blocks there; lawns and trees in the game city)
+await overpass(`area["name"="臺北市"]["admin_level"="4"]->.a;(way["leisure"="park"](area.a);relation["leisure"="park"](area.a);way(id:827791918,237121375););out geom;`, "parks.json");
 // the 12 districts, for 我的臺北
 await overpass(`area["name"="臺北市"]["admin_level"="4"]->.a;rel(area.a)["boundary"="administrative"]["admin_level"="7"];out geom;`, "districts.json");
 // 都更: self-initiated renewal-unit cases (都更處 GIS API) and Taipei land-section boundaries (地政局)

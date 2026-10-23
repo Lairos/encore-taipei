@@ -8,8 +8,8 @@ import { planCity, buildCity, buildRoads } from "./city.js";
 import { LAYER_BUILDERS, buildAnchors, setLayerStyle } from "./layers.js";
 import { buildSky, applyNight } from "./sky.js";
 import { buildGameTerrain, buildGameWater, buildGameCity, buildTrees, buildStreets, buildTraffic, buildCloudShadows } from "./game.js";
-import { buildRealGeometry, buildRealNight, buildRealGame } from "./realbuildings.js";
 import { buildIcons } from "./icons.js";
+import { buildParks } from "./parks.js";
 import { POLICIES } from "./policies.js";
 
 const WAVE_MAX = 260; // radius that covers the whole slab from City Hall
@@ -33,28 +33,25 @@ export async function createWorld(scene, { quality }) {
     layers.set(p.id, { policy: p, ...l });
     scene.add(l.group);
   }
-  // landmark zones carry real OpenStreetMap buildings, so no procedural blocks there
-  const zones = T.landmarks.zones.map(([x, z, r]) => ({ x, z, r }));
-  const exclusions = [...anchors.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions), ...zones];
-  const items = planCity(T, { quality, exclusions });
+  // the standard city fabric fills everything but the landmarks, the policy sites and the parks
+  const parks = buildParks(T);
+  const exclusions = [...anchors.exclusions, ...icons.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions)];
+  const items = planCity(T, { quality, exclusions, open: parks.open });
   const city = buildCity(items);
   scene.add(city.mesh);
   const realRoads = buildRoads(T);
   scene.add(realRoads);
-  const realGeo = buildRealGeometry(T);
-  const realNight = buildRealNight(realGeo);
-  scene.add(realNight);
 
   // game-style city, revealed by the wave
   const game = new THREE.Group();
-  game.add(buildGameTerrain(T, terrain.userData.surface), buildGameWater(water.geometry), buildGameCity(items, quality));
-  const trees = buildTrees(T, items, quality);
+  game.add(buildGameTerrain(T, terrain.userData.surface, parks), buildGameWater(water.geometry), buildGameCity(items, quality));
+  const trees = buildTrees(T, items, quality, parks, icons.exclusions);
   const streets = buildStreets(T);
   const traffic = buildTraffic(T, streets.polylines, quality);
   const clouds = buildCloudShadows(T);
-  game.add(trees.group, streets.mesh, traffic.mesh, clouds.group, buildRealGame(realGeo));
+  game.add(trees.group, streets.mesh, traffic.mesh, clouds.group);
   scene.add(game);
-  const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads, realNight];
+  const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads];
 
   const sky = buildSky();
   scene.add(sky.mesh);
@@ -171,6 +168,7 @@ export async function createWorld(scene, { quality }) {
     // per frame: sky follows the camera; traffic, clouds and the shadow box follow the view in game style
     update(dt, camera, target) {
       sky.mesh.position.copy(camera.position);
+      icons.animate(dt);
       if (style <= 0) return;
       traffic.update(dt);
       clouds.update(dt);
