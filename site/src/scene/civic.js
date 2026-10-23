@@ -1,18 +1,14 @@
-// Policies without a construction site of their own, drawn the SimCity way: oversized, readable props where the
-// city delivers them, each changing with the date like the other layers (起點 → 做到了／正在做 → 接下來).
-//   生育補助   the city's women & children hospital (婦幼院區) — pink roof, heart and balloons from 2023.07
-//   敬老卡     聯合醫院 branches, 萬芳 and 關渡 — a gold card over each hospital where the points now work (2026.07)
-//   托育補助   City Hall (citywide; illustrative) — a daycare house that gains its slide and toy blocks (2026.07)
-//   育兒減工時 City Hall (illustrative) — a street clock and families leaving work early (2026.03, more in 2027)
-//   CiviClaw   City Hall — an AI halo with orbiting agents (planned for the end of 2027)
-//   AI 教育    every high school — an AI Lab dome, rolled out over the four-year plan (2026.07 → 2030)
-//   國中小午餐 every 國中小 — a school campus with a gold lunch bowl from 2026.08.31
+// Policies without a construction site of their own, drawn the SimCity way: oversized, readable props, each changing
+// with the date like the other layers (起點 → 做到了／正在做 → 接下來).
+//   全市政策   生育補助, 育兒減工時, 托育補助, 敬老卡, AI 教育, 國中小午餐 and CiviClaw have no single place, so they
+//              stand on a half ring of pedestals on the plaza east of City Hall, each rising on the day it starts
 //   大街廓都更 the two demonstration sites — today's ground, then blueprint towers with public facilities
 //   大安路人行道 the real works site — narrow pavement → works moving block by block → wide pavement (2027.02)
-// Props only show in the game city (the night city keeps the pins and glows).
+// The school campuses are part of the city (buildSchoolGrounds). Props only show in the game city.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { U, mulberry, smooth } from "./shared.js";
+import { U, STAGE, mulberry, smooth } from "./shared.js";
+import { POLICIES } from "./policies.js";
 
 const BM = 0.016 * 0.8;
 const ring2 = (flat) => {
@@ -57,29 +53,35 @@ function batch() {
     },
   };
 }
-// static meshes under `root`, merged into one mesh per material
-function flatten(root) {
+// a prop's still parts → one vertex-coloured mesh, the glowing or see-through ones merged per material; anything
+// marked keep() (a clock hand, a puff of steam) is left to move on its own
+const keep = (o) => ((o.userData.keep = true), o);
+function bake(root) {
   root.updateMatrixWorld(true);
   const inv = root.matrixWorld.clone().invert();
-  const byMat = new Map(),
+  const plain = batch(),
+    lit = new Map(),
     meshes = [];
-  root.traverse((o) => o.isMesh && !o.isInstancedMesh && meshes.push(o));
+  const walk = (o) => {
+    if (o.userData.keep) return;
+    if (o.isMesh && !o.isInstancedMesh) meshes.push(o);
+    for (const c of o.children) walk(c);
+  };
+  root.children.forEach(walk);
   for (const o of meshes) {
-    let g = o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
-    if (g.index) g = g.toNonIndexed();
-    g.deleteAttribute("uv");
-    if (!byMat.has(o.material)) byMat.set(o.material, []);
-    byMat.get(o.material).push(g);
+    const g = o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    const m = o.material;
+    if (m.transparent || (m.emissive?.getHex() && m.emissiveIntensity > 0)) {
+      const gg = g.index ? g.toNonIndexed() : g;
+      gg.deleteAttribute("uv");
+      if (!lit.has(m)) lit.set(m, []);
+      lit.get(m).push(gg);
+    } else plain.add(g, "#" + m.color.getHexString());
     o.removeFromParent();
   }
-  for (const [m, geos] of byMat) root.add(mesh(mergeGeometries(geos), m));
+  root.add(plain.build());
+  for (const [m, geos] of lit) root.add(mesh(mergeGeometries(geos), m));
   return root;
-}
-// a built prop's meshes, baked into a batch at (x, y, z)
-function bake(group, b, x, y, z) {
-  group.updateMatrixWorld(true);
-  const at = new THREE.Matrix4().makeTranslation(x, y, z);
-  group.traverse((o) => o.isMesh && b.add(o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(at, o.matrixWorld)), "#" + o.material.color.getHexString()));
 }
 const personGeos = (h) => [
   [new THREE.CapsuleGeometry(h * 0.22, h * 0.45, 3, 8).translate(0, h * 0.45, 0), null],
@@ -100,18 +102,6 @@ function site(T, x, z) {
 }
 
 // ---------- shared props ----------
-function hospital(trim) {
-  const g = new THREE.Group();
-  const white = toon("#f6f6f2"),
-    glass = toon("#7fa6c4");
-  g.add(mesh(box(1.0, 0.42, 0.62), white), mesh(box(0.42, 0.62, 0.5, 0.18, 0, -0.02), white));
-  for (const y of [0.1, 0.22, 0.34]) g.add(mesh(box(1.02, 0.05, 0.64, 0, y), glass, false));
-  g.add(mesh(box(0.44, 0.04, 0.52, 0.18, 0.62), toon(trim)));
-  // the medical cross on the roof (green, as on Taiwanese clinics — not the protected red cross)
-  const cross = toon("#2fb36a");
-  g.add(mesh(box(0.06, 0.2, 0.06, 0.18, 0.66), cross), mesh(box(0.2, 0.06, 0.06, 0.18, 0.73), cross));
-  return g;
-}
 function person(color, h = 0.16) {
   const g = new THREE.Group();
   g.add(mesh(new THREE.CapsuleGeometry(h * 0.22, h * 0.45, 3, 8).translate(0, h * 0.45, 0), toon(color)));
@@ -130,224 +120,235 @@ function heartGeometry(s) {
 function blueprintMat() {
   return new THREE.MeshLambertMaterial({ color: "#3d8bff", transparent: true, opacity: 0.45, emissive: "#1d5fd0", emissiveIntensity: 0.35, depthWrite: false });
 }
+const glowToon = (color, k = 0.5) => toon(color, { emissive: color, emissiveIntensity: k });
 
-// ---------- 生育補助加碼: the women & children hospital ----------
-export function buildBirth(T, p) {
-  const h = T.landmarks.policySites.hospitals.find((q) => q.name === "聯合醫院婦幼院區");
-  const g = site(T, ...h.at);
-  const roofBefore = toon("#9aa3ab"),
-    pink = toon("#ff8fb1");
-  const hosp = hospital("#9aa3ab");
-  const roof = hosp.children.find((c) => c.material === roofBefore);
-  g.add(hosp);
-  const heart = mesh(heartGeometry(0.75), toon("#ff5d8f", { emissive: "#ff5d8f", emissiveIntensity: 0.25 }));
-  const balloons = new THREE.Group();
-  [
-    ["#ff8fb1", -0.45, 0.2],
-    ["#7cc8f4", 0.55, -0.15],
-    ["#ffdd33", -0.2, -0.4],
-  ].forEach(([c, x, z], i) => {
-    balloons.add(mesh(new THREE.SphereGeometry(0.11, 12, 10).scale(1, 1.2, 1).translate(x, 1.05 + i * 0.12, z), toon(c)));
-    balloons.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 3).translate(x, 0.72 + i * 0.12, z), toon("#ffffff"), false));
-  });
-  g.add(heart, balloons);
-  return {
-    group: g,
-    anchor: new THREE.Vector3(h.at[0], T.groundY(...h.at) + 1.9, h.at[1]),
-    exclusions: [{ x: h.at[0], z: h.at[1], r: 0.75 }],
-    update(d, flash) {
-      gameOnly(g);
-      const on = d >= p.event;
-      roof.material = on ? pink : roofBefore;
-      heart.visible = balloons.visible = on;
-      const t = U.uTime.value;
-      heart.position.set(0.18, 1.25 + Math.sin(t * 1.6) * 0.06, 0);
-      heart.rotation.y = t * 0.8;
-      heart.scale.setScalar(1 + flash * 0.4);
-      balloons.position.y = Math.sin(t * 1.2 + 1) * 0.04;
-    },
-  };
-}
-
-// ---------- 敬老卡 600 點: the hospitals where the points now pay for check-ups and registration ----------
-export function buildElder(T, p) {
-  const g = new THREE.Group();
-  const cards = [];
-  const cardGeo = new THREE.BoxGeometry(0.5, 0.32, 0.04);
-  const cardMat = toon("#ffc94a", { emissive: "#ffb300", emissiveIntensity: 0.3 });
-  const stripe = toon("#ff8a3d");
-  const list = T.landmarks.policySites.hospitals.filter((q) => q.name !== "聯合醫院婦幼院區"); // 婦幼 carries 生育補助
-  // the hospitals themselves are static: one mesh per colour for all of them
-  const halls = batch();
-  const model = hospital("#2fb3a8");
-  for (const h of list) bake(model, halls, h.at[0], T.groundY(...h.at), h.at[1]);
-  const built = halls.build();
-  g.add(built);
-  // the cards: two instanced meshes (card, stripe) turning over the hospitals
-  const cardInst = new THREE.InstancedMesh(cardGeo, cardMat, list.length),
-    stripeInst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.06, 0.045).translate(0, 0.08, 0), stripe, list.length);
-  cardInst.frustumCulled = stripeInst.frustumCulled = false;
-  for (const h of list) cards.push({ x: h.at[0], y: T.groundY(...h.at) + 1.05, z: h.at[1] });
-  g.add(cardInst, stripeInst);
-  const cm = new THREE.Matrix4(),
-    cq = new THREE.Quaternion(),
-    cv = new THREE.Vector3(),
-    cs = new THREE.Vector3(),
-    upY = new THREE.Vector3(0, 1, 0);
-  const first = list[0].at;
-  return {
-    group: g,
-    anchor: new THREE.Vector3(first[0], T.groundY(...first) + 1.8, first[1]),
-    exclusions: list.map((h) => ({ x: h.at[0], z: h.at[1], r: 0.7 })),
-    update(d, flash) {
-      // the batch sits in world space, so it shows or hides with the game style rather than popping up
-      const k = smooth(0.45, 0.9, U.uGame.value);
-      built.visible = k > 0.5;
-      const on = d >= p.event && k > 0.01;
-      const t = U.uTime.value;
-      cardInst.visible = stripeInst.visible = on;
-      if (!on) return;
-      cards.forEach((c, i) => {
-        cm.compose(cv.set(c.x, c.y + Math.sin(t * 1.4 + i) * 0.05, c.z), cq.setFromAxisAngle(upY, t * 0.9 + i), cs.setScalar(k * (1 + flash * 0.5)));
-        cardInst.setMatrixAt(i, cm);
-        stripeInst.setMatrixAt(i, cm);
-      });
-      cardInst.instanceMatrix.needsUpdate = stripeInst.instanceMatrix.needsUpdate = true;
-    },
-  };
-}
-
-// ---------- City Hall: 托育補助, 育兒減工時 and CiviClaw share its plaza (citywide programmes) ----------
+// ---------- City Hall: the citywide programmes on a half ring of pedestals ----------
+// The policies with no single place of their own (`hub` in policies.js) stand on a plaza east of City Hall, in the
+// order they began from the south end of the ring (by 臺北101) to the north, where the opening's camera sees the
+// latest rise; each pedestal rises on the day its policy starts (illustrative).
 function cityHall(T) {
   const ic = T.landmarks.icons.find((i) => i.name === "臺北市政府");
   const [x, z] = centroidOf(ring2(ic.outline));
   return { x, z, top: T.groundY(x, z) + ic.wall };
 }
-
-export function buildChildcare(T, p) {
+const HUB_R = 2.6; // ring radius round City Hall's centre; the roads west and north of it stay clear
+export function hubLayout(T) {
   const ch = cityHall(T);
-  const [x, z] = [ch.x - 2.1, ch.z - 1.2]; // on the plaza north-west of City Hall (illustrative)
-  const g = site(T, x, z);
-  const wallBefore = toon("#d9d4c8"),
-    wallAfter = toon("#fff1d6");
-  const house = mesh(box(0.7, 0.36, 0.5), wallBefore);
-  const roofG = new THREE.ConeGeometry(0.52, 0.3, 4, 1).rotateY(Math.PI / 4).scale(1, 1, 0.75).translate(0, 0.51, 0);
-  const roofBefore = toon("#8f9bab"),
-    roofAfter = toon("#ff7a59");
-  const roof = mesh(roofG, roofBefore);
-  g.add(house, roof);
-  // what the subsidy adds: toy blocks, a slide, a sunny yard
-  const extra = new THREE.Group();
-  const colors = ["#ff5d73", "#ffd23f", "#38b6ff", "#5cd68a"];
-  [
-    [0.55, 0, 0.2],
-    [0.7, 0, 0.2],
-    [0.62, 0.14, 0.2],
-    [0.55, 0, 0.36],
-  ].forEach(([bx, by, bz], i) => extra.add(mesh(box(0.13, 0.13, 0.13, bx, by, bz, i * 0.3), toon(colors[i]))));
-  extra.add(mesh(box(0.06, 0.32, 0.06, -0.62, 0, -0.1), toon("#38b6ff")), mesh(new THREE.BoxGeometry(0.46, 0.03, 0.12).rotateZ(0.6).translate(-0.44, 0.17, -0.1), toon("#ffd23f")));
-  extra.add(mesh(new THREE.CircleGeometry(0.6, 24).rotateX(-Math.PI / 2).translate(0.1, 0.006, 0.35), toon("#9ad36a"), false));
-  extra.add(person("#ff8a3d", 0.12).translateX(0.3).translateZ(0.55), person("#5cd68a", 0.1).translateX(0.15).translateZ(0.62));
-  g.add(flatten(extra));
-  return {
-    group: g,
-    anchor: new THREE.Vector3(x, T.groundY(x, z) + 1.4, z),
-    exclusions: [],
-    update(d, flash) {
-      gameOnly(g);
-      const on = d >= p.event;
-      house.material = on ? wallAfter : wallBefore;
-      roof.material = on ? roofAfter : roofBefore;
-      extra.visible = on;
-      extra.scale.setScalar(1 + flash * 0.3);
-    },
-  };
+  const ids = POLICIES.filter((p) => p.hub)
+    .sort((a, b) => a.event - b.event)
+    .map((p) => p.id);
+  const slots = new Map(
+    ids.map((id, i) => {
+      const a = THREE.MathUtils.degToRad(80 - (160 * i) / Math.max(1, ids.length - 1));
+      const x = ch.x + Math.cos(a) * HUB_R,
+        z = ch.z + Math.sin(a) * HUB_R;
+      return [id, { x, z, y: T.groundY(x, z), a, i }];
+    }),
+  );
+  return { ...ch, ids, slots, anchor: new THREE.Vector3(ch.x + 0.9, ch.top + 1.7, ch.z) };
 }
 
-export function buildWorktime(T, p) {
-  const ch = cityHall(T);
-  const [x, z] = [ch.x - 2.3, ch.z + 0.6]; // west plaza (illustrative)
-  const g = site(T, x, z);
-  // street clock: the minute hand runs, the face reads "an hour earlier"
-  const clock = new THREE.Group();
-  clock.add(mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.9, 8).translate(0, 0.45, 0), toon("#2d3436")));
-  const face = new THREE.Group();
-  face.position.y = 1.0;
-  face.add(mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.06, 32).rotateX(Math.PI / 2), toon("#ffffff")));
-  face.add(mesh(new THREE.TorusGeometry(0.26, 0.025, 6, 32), toon("#1d3557")));
-  face.add(mesh(mergeGeometries(Array.from({ length: 12 }, (_, k) => new THREE.BoxGeometry(0.02, 0.05, 0.02).translate(0, 0.21, 0.035).rotateZ((k / 12) * Math.PI * 2))), toon("#1d3557"), false));
-  const hour = mesh(new THREE.BoxGeometry(0.03, 0.13, 0.02).translate(0, 0.06, 0.05), toon("#1d3557"), false);
-  const minute = mesh(new THREE.BoxGeometry(0.02, 0.2, 0.02).translate(0, 0.09, 0.06), toon("#ff5d73"), false);
-  face.add(hour, minute);
-  clock.add(face);
-  g.add(clock);
-  // families heading home early; a second group joins with the 2027 expansion
-  const fam = (n0, dx) => {
-    const f = new THREE.Group();
-    f.add(person("#2e6be6").translateX(dx), person("#ff8a3d").translateX(dx + 0.12), person("#ffd23f", 0.1).translateX(dx + 0.06).translateZ(0.1));
-    flatten(f);
-    f.position.z = 0.35;
-    f.userData.n0 = n0;
-    return f;
-  };
-  const pilot = fam(0, 0.2),
-    expand = fam(1, -0.45);
-  g.add(pilot, expand);
-  const EXPAND = 2027.0;
-  return {
-    group: g,
-    anchor: new THREE.Vector3(x, T.groundY(x, z) + 1.6, z),
-    exclusions: [],
-    update(d, flash) {
-      gameOnly(g);
-      const on = d >= p.event;
-      clock.visible = on;
-      pilot.visible = on;
-      expand.visible = d >= EXPAND;
-      // 16:00 rather than 17:00, the minute hand sweeping
-      const t = U.uTime.value;
-      minute.rotation.z = -t * 0.8;
-      hour.rotation.z = -((4 + (t * 0.8) / (Math.PI * 2)) / 12) * Math.PI * 2;
-      for (const f of [pilot, expand]) f.position.x = ((t * 0.12 + f.userData.n0 * 0.5) % 1) * 0.4;
-      face.scale.setScalar(1 + flash * 0.4);
-    },
-  };
-}
-
-export function buildCiviclaw(T, p) {
-  const ch = cityHall(T);
-  const g = new THREE.Group();
-  g.position.set(ch.x, ch.top + 0.35, ch.z);
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.05, 8, 64).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 0.9, 1.4) }));
-  const ring2b = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.025, 6, 48).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 1.0, 1.4) }));
-  const agents = new THREE.Group();
-  for (let k = 0; k < 8; k++) {
-    const a = mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), toon("#5fe3ff", { emissive: "#2aa8d6", emissiveIntensity: 0.6 }));
-    a.userData.k = k;
-    agents.add(a);
+// the plaza under the ring: paving with a gold inlay along the pedestals, kept clear of the city blocks, and people
+// strolling past each pedestal once it is up
+export function buildCivicPlaza(T) {
+  const hub = hubLayout(T);
+  const y = T.groundY(hub.x, hub.z);
+  const R = HUB_R + 0.8;
+  const ground = batch();
+  ground.add(new THREE.CircleGeometry(R, 48, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2).translate(hub.x, y + 0.016, hub.z), "#efe6d4");
+  ground.add(new THREE.RingGeometry(HUB_R - 0.04, HUB_R + 0.04, 64, 1, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2).translate(hub.x, y + 0.02, hub.z), "#e8b84a");
+  // the marked spot of each pedestal, there before it rises
+  for (const s of hub.slots.values()) ground.add(new THREE.CircleGeometry(0.37, 28).rotateX(-Math.PI / 2).translate(s.x, s.y + 0.024, s.z), "#d8cfbd");
+  const g = ground.build();
+  g.traverse((o) => o.isMesh && (o.castShadow = false));
+  const exclusions = [];
+  for (let dx = 0; dx <= R; dx += 0.7)
+    for (let dz = -R; dz <= R; dz += 0.7) if (Math.hypot(dx, dz) <= R) exclusions.push({ x: hub.x + dx, z: hub.z + dz, r: 0.55 });
+  // a walk in front of each pair of neighbouring pedestals, busy from when the later of the two went up
+  const at = (a, r) => [hub.x + Math.cos(a) * r, hub.z + Math.sin(a) * r];
+  const byId = Object.fromEntries(POLICIES.map((p) => [p.id, p]));
+  const crowd = [];
+  for (let i = 0; i + 1 < hub.ids.length; i++) {
+    const s0 = hub.slots.get(hub.ids[i]),
+      s1 = hub.slots.get(hub.ids[i + 1]);
+    crowd.push({ walks: [[...at(s0.a, HUB_R + 0.5), ...at(s1.a, HUB_R + 0.5)]], n: 5, from: Math.max(byId[hub.ids[i]].event, byId[hub.ids[i + 1]].event), lift: 0.016 });
   }
-  g.add(halo, ring2b, agents);
+  return { group: g, exclusions, crowd, hub: { anchor: hub.anchor, ids: hub.ids } };
+}
+
+// a pedestal at the policy's place in the ring (its marked spot is part of the plaza): the stand rises when the
+// policy starts with its token, which hovers and slowly turns; the rim takes the policy's stage colour
+function pedestal(T, p) {
+  const s = hubLayout(T).slots.get(p.id);
+  const g = site(T, s.x, s.z);
+  const sb = batch();
+  sb.add(new THREE.CylinderGeometry(0.33, 0.38, 0.2, 28).translate(0, 0.1, 0), "#fbf7ee");
+  sb.add(new THREE.TorusGeometry(0.34, 0.03, 8, 40).rotateX(Math.PI / 2).translate(0, 0.2, 0), STAGE[p.status].color);
+  const stand = sb.build();
+  const token = new THREE.Group();
+  g.add(stand, token);
+  const phase = s.a * 3;
   return {
     group: g,
-    anchor: new THREE.Vector3(ch.x + 1.2, ch.top + 1.8, ch.z + 0.6),
-    exclusions: [],
+    token,
+    anchor: new THREE.Vector3(s.x, s.y + (s.i % 2 ? 2.25 : 1.3), s.z), // staggered so neighbouring pins clear each other
+    // returns how far it has risen (0..1)
     update(d, flash) {
-      const k = smooth(0.45, 0.9, U.uGame.value) * smooth(p.event - 0.02, p.event + 0.05, d);
-      g.visible = k > 0.01;
-      g.scale.setScalar(Math.max(0.001, k) * (1 + flash * 0.3));
+      gameOnly(g);
+      const k = smooth(p.event - 0.03, p.event + 0.08, d);
+      stand.scale.set(1, Math.max(0.001, k), 1);
+      token.visible = k > 0.5;
       const t = U.uTime.value;
-      halo.rotation.y = t * 0.4;
-      ring2b.position.y = 0.25 + Math.sin(t * 1.5) * 0.06;
-      for (const a of agents.children) {
-        const u = t * 0.7 + (a.userData.k / 8) * Math.PI * 2;
-        a.position.set(Math.cos(u) * 1.1, 0.15 + Math.sin(u * 2) * 0.12, Math.sin(u) * 1.1);
-        a.rotation.set(u, u * 0.7, 0);
-      }
+      token.position.y = 0.32 + Math.sin(t * 1.5 + phase) * 0.03;
+      token.rotation.y = t * 0.5 + phase;
+      token.scale.setScalar(Math.max(0.001, smooth(0.5, 1, k)) * 1.3 * (1 + flash * 0.4));
+      return k;
     },
   };
 }
+// the layer for a pedestal, its token's still parts baked; extra(k, d) animates what was kept
+function onPedestal(ped, extra) {
+  bake(ped.token);
+  return { group: ped.group, anchor: ped.anchor, exclusions: [], update: extra ? (d, flash) => extra(ped.update(d, flash), d, flash) : ped.update };
+}
 
-// ---------- school campuses (國中小: 午餐 / 高中: AI Lab) ----------
+// 生育補助加碼: a heart with balloons
+export function buildBirth(T, p) {
+  const ped = pedestal(T, p);
+  ped.token.add(mesh(heartGeometry(0.42).translate(0, 0.2, 0), glowToon("#ff5d8f", 0.25)));
+  [
+    ["#ff8fb1", -0.24, 0.1],
+    ["#7cc8f4", 0.26, -0.06],
+    ["#ffdd33", -0.04, -0.24],
+  ].forEach(([c, x, z], i) => {
+    ped.token.add(mesh(new THREE.SphereGeometry(0.07, 12, 10).scale(1, 1.2, 1).translate(x, 0.52 + i * 0.06, z), toon(c)));
+    ped.token.add(mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.32, 3).translate(x, 0.3 + i * 0.06, z), toon("#ffffff"), false));
+  });
+  return onPedestal(ped);
+}
+
+// 敬老卡 600 點: the gold card
+export function buildElder(T, p) {
+  const ped = pedestal(T, p);
+  const card = new THREE.Group();
+  card.add(mesh(new THREE.BoxGeometry(0.46, 0.3, 0.035), glowToon("#ffc94a", 0.3)));
+  card.add(mesh(new THREE.BoxGeometry(0.465, 0.055, 0.04).translate(0, 0.08, 0), toon("#ff8a3d")));
+  card.add(mesh(new THREE.BoxGeometry(0.08, 0.06, 0.04).translate(-0.14, -0.05, 0), toon("#e9e2d2")));
+  card.position.y = 0.26;
+  ped.token.add(card);
+  return onPedestal(ped);
+}
+
+// 托育補助提高: a daycare house with toy blocks
+export function buildChildcare(T, p) {
+  const ped = pedestal(T, p);
+  const t = ped.token;
+  t.add(mesh(box(0.4, 0.22, 0.3), toon("#fff1d6")), mesh(new THREE.ConeGeometry(0.31, 0.18, 4, 1).rotateY(Math.PI / 4).scale(1, 1, 0.75).translate(0, 0.31, 0), toon("#ff7a59")));
+  t.add(mesh(box(0.08, 0.12, 0.01, 0, 0, 0.151), toon("#38b6ff")));
+  ["#ff5d73", "#ffd23f", "#5cd68a"].forEach((c, i) => t.add(mesh(box(0.08, 0.08, 0.08, 0.27, i === 2 ? 0.08 : 0, i === 1 ? 0.12 : 0.02, i * 0.4), toon(c))));
+  return onPedestal(ped);
+}
+
+// 育兒減工時不減薪: a clock reading 16:00 rather than 17:00, families on their way home; more join with the 2027
+// expansion
+export function buildWorktime(T, p) {
+  const ped = pedestal(T, p);
+  const face = new THREE.Group();
+  face.position.y = 0.28;
+  face.add(mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 32).rotateX(Math.PI / 2), toon("#ffffff")));
+  face.add(mesh(new THREE.TorusGeometry(0.2, 0.022, 6, 32), toon("#1d3557")));
+  face.add(mesh(mergeGeometries(Array.from({ length: 12 }, (_, k) => new THREE.BoxGeometry(0.016, 0.04, 0.016).translate(0, 0.16, 0.03).rotateZ((k / 12) * Math.PI * 2))), toon("#1d3557"), false));
+  const hour = keep(mesh(new THREE.BoxGeometry(0.024, 0.1, 0.016).translate(0, 0.045, 0.04), toon("#1d3557"), false));
+  const minute = keep(mesh(new THREE.BoxGeometry(0.016, 0.15, 0.016).translate(0, 0.07, 0.045), toon("#ff5d73"), false));
+  face.add(hour, minute);
+  ped.token.add(face);
+  const family = (dx, dz) => {
+    const f = new THREE.Group();
+    f.add(person("#2e6be6", 0.11).translateX(dx), person("#ff8a3d", 0.11).translateX(dx + 0.08), person("#ffd23f", 0.08).translateX(dx + 0.04).translateZ(0.07));
+    f.position.set(0, 0.2, dz);
+    return bake(f);
+  };
+  const pilot = family(-0.2, 0.12),
+    expand = family(0.05, -0.18);
+  ped.group.add(pilot, expand);
+  const EXPAND = 2027.0;
+  return onPedestal(ped, (k, d) => {
+    pilot.visible = k > 0.99;
+    expand.visible = k > 0.99 && d >= EXPAND;
+    const t = U.uTime.value;
+    minute.rotation.z = -t * 0.8;
+    hour.rotation.z = -((4 + (t * 0.8) / (Math.PI * 2)) / 12) * Math.PI * 2;
+  });
+}
+
+// AI 教育白皮書: an open book under a glowing chip
+export function buildAiEdu(T, p) {
+  const ped = pedestal(T, p);
+  const t = ped.token;
+  for (const sd of [-1, 1]) {
+    t.add(mesh(new THREE.BoxGeometry(0.22, 0.02, 0.3).translate(sd * 0.11, 0, 0).rotateZ(sd * 0.22).translate(0, 0.06, 0), toon("#2e6be6")));
+    t.add(mesh(new THREE.BoxGeometry(0.2, 0.02, 0.27).translate(sd * 0.1, 0.018, 0).rotateZ(sd * 0.22).translate(0, 0.06, 0), toon("#ffffff")));
+  }
+  const chip = new THREE.Group();
+  chip.position.y = 0.36;
+  chip.add(mesh(new THREE.BoxGeometry(0.2, 0.04, 0.2), toon("#1d3557")), mesh(new THREE.BoxGeometry(0.11, 0.045, 0.11), glowToon("#5fe3ff", 0.8)));
+  const pins = [];
+  for (let k = -1; k <= 1; k++)
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) pins.push(new THREE.BoxGeometry(az ? 0.025 : 0.05, 0.012, az ? 0.05 : 0.025).translate(ax * 0.12 + (az ? k * 0.06 : 0), 0, az * 0.12 + (ax ? k * 0.06 : 0)));
+  chip.add(mesh(mergeGeometries(pins), toon("#c9d3e3"), false));
+  t.add(keep(bake(chip)));
+  return onPedestal(ped, () => (chip.position.y = 0.36 + Math.sin(U.uTime.value * 2.2) * 0.03));
+}
+
+// 國中小營養午餐全面免費: a gold bowl of rice with chopsticks and a wisp of steam
+export function buildLunch(T, p) {
+  const ped = pedestal(T, p);
+  const t = ped.token;
+  t.add(mesh(new THREE.SphereGeometry(0.24, 20, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).translate(0, 0.24, 0), new THREE.MeshLambertMaterial({ color: "#ffc233", emissive: "#e09400", emissiveIntensity: 0.35, side: THREE.DoubleSide })));
+  t.add(mesh(new THREE.SphereGeometry(0.22, 20, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1).translate(0, 0.22, 0), toon("#ffffff")));
+  for (const dx of [-0.03, 0.03]) t.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.4, 5).rotateZ(0.5).translate(0.1 + dx, 0.36, 0.04), toon("#8a5a3c"), false));
+  const steam = [0, 1, 2].map((i) => {
+    const s = keep(mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshLambertMaterial({ color: "#ffffff", transparent: true, opacity: 0.6, depthWrite: false }), false));
+    t.add(s);
+    return s;
+  });
+  return onPedestal(ped, () => {
+    const time = U.uTime.value;
+    steam.forEach((s, i) => {
+      const u = (time * 0.35 + i / 3) % 1;
+      s.position.set(Math.sin(u * 6 + i) * 0.04 - 0.05, 0.3 + u * 0.35, 0);
+      s.scale.setScalar(0.6 + u);
+      s.material.opacity = 0.6 * (1 - u);
+    });
+  });
+}
+
+// 市府 AI 助理 CiviClaw: a robot with agents circling it
+export function buildCiviclaw(T, p) {
+  const ped = pedestal(T, p);
+  const t = ped.token;
+  t.add(mesh(box(0.3, 0.24, 0.26, 0, 0.06), toon("#f4f6f8")), mesh(box(0.24, 0.09, 0.02, 0, 0.14, 0.13), toon("#1d3557")));
+  for (const ex of [-0.06, 0.06]) t.add(mesh(new THREE.SphereGeometry(0.024, 10, 8).translate(ex, 0.185, 0.145), glowToon("#5fe3ff", 1)));
+  t.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.12, 5).translate(0, 0.36, 0), toon("#9aa3ab"), false), mesh(new THREE.SphereGeometry(0.03, 10, 8).translate(0, 0.43, 0), glowToon("#5fe3ff", 1)));
+  const agents = keep(new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), glowToon("#5fe3ff", 0.6), 4));
+  agents.frustumCulled = false;
+  t.add(agents);
+  const am = new THREE.Matrix4(),
+    av = new THREE.Vector3(),
+    ae = new THREE.Euler(),
+    aq = new THREE.Quaternion(),
+    one = new THREE.Vector3(1, 1, 1);
+  return onPedestal(ped, () => {
+    const time = U.uTime.value;
+    for (let k = 0; k < 4; k++) {
+      const u = time * 0.9 + (k / 4) * Math.PI * 2;
+      agents.setMatrixAt(k, am.compose(av.set(Math.cos(u) * 0.3, 0.18 + Math.sin(u * 2) * 0.06, Math.sin(u) * 0.3), aq.setFromEuler(ae.set(u, u * 0.7, 0)), one));
+    }
+    agents.instanceMatrix.needsUpdate = true;
+  });
+}
+
+// ---------- school grounds (國中小, 高中): part of the city, campuses with a running track ----------
 // one InstancedMesh per part: classroom wings, roofs, the running track and its field
 function campuses(T, list, seed, size) {
   const rnd = mulberry(seed);
@@ -382,79 +383,12 @@ function campuses(T, list, seed, size) {
   g.add(...meshes);
   return { group: g, poses };
 }
-
-export function buildLunchCampus(T, p) {
-  const list = T.geo.schools;
-  const { group, poses } = campuses(T, list, 31, 1.8);
-  // gold bowls with a wisp of steam, floating over every 國中小 from the first day of the 115 school year
-  const bowlGeo = new THREE.SphereGeometry(0.16, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).translate(0, 0.16, 0);
-  const riceGeo = new THREE.SphereGeometry(0.15, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1).translate(0, 0.15, 0);
-  const bowls = new THREE.InstancedMesh(bowlGeo, new THREE.MeshLambertMaterial({ color: "#ffc233", emissive: "#e09400", emissiveIntensity: 0.35, side: THREE.DoubleSide }), poses.length);
-  const rice = new THREE.InstancedMesh(riceGeo, toon("#ffffff"), poses.length);
+export function buildSchoolGrounds(T) {
+  const a = campuses(T, T.geo.schools, 31, 1.8),
+    b = campuses(T, T.landmarks.policySites.highSchools, 47, 1.9);
   const g = new THREE.Group();
-  g.add(group, bowls, rice);
-  const m = new THREE.Matrix4(),
-    s = new THREE.Vector3(),
-    v = new THREE.Vector3(),
-    q = new THREE.Quaternion();
-  return {
-    group: g,
-    exclusions: poses.map(({ x, z }) => ({ x, z, r: 0.75, low: 1.3 })),
-    update(d, flash) {
-      gameOnly(g);
-      const on = d >= p.event;
-      bowls.visible = rice.visible = on;
-      if (!on || !g.visible) return;
-      const t = U.uTime.value;
-      poses.forEach(({ x, y, z }, i) => {
-        m.compose(v.set(x, y + 0.85 + Math.sin(t * 1.5 + i) * 0.05, z), q, s.setScalar(1.8 * (1 + flash * 0.5)));
-        bowls.setMatrixAt(i, m);
-        rice.setMatrixAt(i, m);
-      });
-      bowls.instanceMatrix.needsUpdate = rice.instanceMatrix.needsUpdate = true;
-    },
-  };
-}
-
-export function buildAiEdu(T, p) {
-  const list = T.landmarks.policySites.highSchools;
-  const { group, poses } = campuses(T, list, 47, 1.9);
-  // AI Labs arrive school by school over the four-year plan (order and pace illustrative)
-  const END = p.event + 4;
-  const rnd = mulberry(5);
-  const start = poses.map(() => p.event + rnd() * (END - p.event - 0.3));
-  const dome = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: "#5fe3ff", emissive: "#1aa3d6", emissiveIntensity: 0.5, transparent: true, opacity: 0.85 }), poses.length);
-  const mast = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 4).translate(0, 0.32, 0), toon("#1d3557"), poses.length);
-  const g = new THREE.Group();
-  g.add(group, dome, mast);
-  const m = new THREE.Matrix4(),
-    v = new THREE.Vector3(),
-    q = new THREE.Quaternion(),
-    sc = new THREE.Vector3();
-  const up = new THREE.Vector3(0, 1, 0);
-  let lastD = -1;
-  return {
-    group: g,
-    anchor: new THREE.Vector3(list[0][0], T.groundY(list[0][0], list[0][1]) + 1.4, list[0][1]),
-    exclusions: poses.map(({ x, z }) => ({ x, z, r: 0.75, low: 1.3 })),
-    update(d, flash) {
-      gameOnly(g);
-      if (Math.abs(d - lastD) < 1e-4 && !flash) return;
-      lastD = d;
-      poses.forEach(({ x, y, z, ry }, i) => {
-        const k = smooth(start[i], start[i] + 0.25, d);
-        // on the roof of the main classroom wing (local 0.15, -0.2, scaled with the campus)
-        const lx = 0.15 * 1.9,
-          lz = -0.2 * 1.9;
-        const ox = lx * Math.cos(ry) + lz * Math.sin(ry),
-          oz = -lx * Math.sin(ry) + lz * Math.cos(ry);
-        m.compose(v.set(x + ox, y + 0.25 * 1.9, z + oz), q.setFromAxisAngle(up, ry), sc.setScalar(Math.max(0.001, k) * 1.9 * (1 + flash * 0.3)));
-        dome.setMatrixAt(i, m);
-        mast.setMatrixAt(i, m);
-      });
-      dome.instanceMatrix.needsUpdate = mast.instanceMatrix.needsUpdate = true;
-    },
-  };
+  g.add(a.group, b.group);
+  return { group: g, exclusions: [...a.poses, ...b.poses].map(({ x, z }) => ({ x, z, r: 0.75, low: 1.3 })) };
 }
 
 // ---------- 大街廓都更: the two demonstration sites ----------

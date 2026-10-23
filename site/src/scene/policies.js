@@ -1,7 +1,10 @@
 // Policy content for the prototype, taken from 「蔣萬安臺北市長任內施政與2026連任政策完整報告」(查核日 2026-10-23).
 // status: done 已實施 / ongoing 推動中 / planned 已宣布規劃. `event` is the decimal-year moment the scene changes.
-// `approx` marks positions or footprints drawn for illustration only.
+// `approx` marks positions or footprints drawn for illustration only; `hub` marks the citywide policies with no single
+// place of their own, which stand on the pedestals by City Hall (civic.js).
 import { ymd } from "./shared.js";
+
+const AT_HALL = "全市適用，展台在市府廣場（示意）";
 
 const S = {
   1: ["生育補助金額常見問答｜臺北市民政局", "https://ca.gov.taipei/News_Content.aspx?n=59F2E04A34FDA3E8&s=DF5CE67EA92183BC&sms=87415A8B9CE81B16"],
@@ -76,9 +79,11 @@ export const POLICIES = [
     when: "115 學年起（2026.08.31）",
     place: [25.0262, 121.5433],
     pinLabel: "午餐全面免費",
+    hub: true,
+    approx: true,
+    approxLabel: AT_HALL,
     before: "家長自付午餐費",
     after: "公私立國中小約 18.6 萬名學生受惠；鮮奶週報 3.0 同步擴大到國中，涵蓋約 28.9 萬名學幼生",
-    numbers: "圖上金色光點為全市國中小（OpenStreetMap 資料，示意）",
     caveat: "免費與否不能直接推論餐食品質，食安需另看採購與抽驗。",
     sources: src(5, 6),
   },
@@ -208,13 +213,13 @@ export const POLICIES = [
     sources: src(22),
   },
   // citywide policies: drawn where the city delivers them (civic.js)
-  { id: "birth", name: "生育補助加碼", status: "done", event: ymd(2023, 7, 1), when: "2023.07 修正", approx: true, approxLabel: "全市適用，標在市立婦幼院區（示意）", before: "—", after: "第 1 名 4 萬、第 2 名 4.5 萬、第 3 名起每名 5 萬元", caveat: "需符合資格，並非所有在臺北生產的家庭都可領。", sources: src(1) },
-  { id: "childcare", name: "托育補助提高", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", approx: true, approxLabel: "全市適用，圖示放在市府廣場（示意）", before: "—", after: "準公共托育最高補助 8,000 元、家長月費 2,500 元；第二胎起送托公共／準公共月費零負擔", caveat: "依核定托育類型及月費項目，非所有私立托育一律免費。", sources: src(2) },
-  { id: "elder", name: "敬老卡 600 點", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", before: "每月 480 點", after: "每月 600 點，新增醫院掛號費、YouBike 2.0E 前 30 分鐘免費等用途", numbers: "地圖上的金色卡片標在新增可用點數的醫院：聯合醫院各院區（敬老健康守護方案）、萬芳醫院、關渡醫院（掛號費）", caveat: "點數為指定用途補助，不等同現金。", sources: src(17) },
-  { id: "worktime", name: "育兒減工時不減薪", status: "ongoing", event: ymd(2026, 3, 1), milestones: [[ymd(2026, 3, 1), "育兒減工時試辦"], [2027.0, "育兒減工時擴大辦理（規劃）"]], when: "2026.03 試辦", approx: true, approxLabel: "全市適用，圖示放在市府廣場（示意）", before: "—", after: "截至 6 月底 480 家事業單位、近 900 名員工受惠；2027 年擴大辦理", caveat: "需雇主參與並符合條件，並非所有家長都已取得。", sources: src(3, 24) },
-  { id: "aiedu", name: "AI 教育白皮書", status: "ongoing", event: ymd(2026, 7, 3), when: "2026.07 發布，4 年計畫", approx: true, approxLabel: "高中位置為實際，建置順序示意", numbers: "地圖上的藍色 AI Lab 標在全市高中（OpenStreetMap），在 4 年計畫期間逐校出現；實際建置學校與順序以教育局年度計畫為準", before: "—", after: "4 年預計投入 92 億元：AI 電腦與載具、光纖到教室、高中 AI Lab、AI 教育中心", caveat: "92 億為預計投入，需按年度預算與驗收核對。", sources: src(8) },
+  { id: "birth", name: "生育補助加碼", status: "done", event: ymd(2023, 7, 1), when: "2023.07 修正", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "第 1 名 4 萬、第 2 名 4.5 萬、第 3 名起每名 5 萬元", caveat: "需符合資格，並非所有在臺北生產的家庭都可領。", sources: src(1) },
+  { id: "childcare", name: "托育補助提高", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "準公共托育最高補助 8,000 元、家長月費 2,500 元；第二胎起送托公共／準公共月費零負擔", caveat: "依核定托育類型及月費項目，非所有私立托育一律免費。", sources: src(2) },
+  { id: "elder", name: "敬老卡 600 點", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", hub: true, approx: true, approxLabel: AT_HALL, before: "每月 480 點", after: "每月 600 點，新增醫院掛號費、YouBike 2.0E 前 30 分鐘免費等用途", numbers: "新增可用點數的醫院：聯合醫院各院區（敬老健康守護方案）、萬芳醫院、關渡醫院（掛號費）", caveat: "點數為指定用途補助，不等同現金。", sources: src(17) },
+  { id: "worktime", name: "育兒減工時不減薪", status: "ongoing", event: ymd(2026, 3, 1), milestones: [[ymd(2026, 3, 1), "育兒減工時試辦"], [2027.0, "育兒減工時擴大辦理（規劃）"]], when: "2026.03 試辦", pinLabel: "育兒減工時", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "截至 6 月底 480 家事業單位、近 900 名員工受惠；2027 年擴大辦理", caveat: "需雇主參與並符合條件，並非所有家長都已取得。", sources: src(3, 24) },
+  { id: "aiedu", name: "AI 教育白皮書", status: "ongoing", event: ymd(2026, 7, 3), when: "2026.07 發布，4 年計畫", hub: true, approx: true, approxLabel: AT_HALL, numbers: "高中 AI Lab 在 4 年計畫期間逐校建置；實際建置學校與順序以教育局年度計畫為準", before: "—", after: "4 年預計投入 92 億元：AI 電腦與載具、光纖到教室、高中 AI Lab、AI 教育中心", caveat: "92 億為預計投入，需按年度預算與驗收核對。", sources: src(8) },
   { id: "urban5099", name: "公辦都更 5099、大街廓都更", status: "planned", event: ymd(2026, 10, 16), when: "2026.10 宣布", approx: true, approxLabel: "示範基地為實際位置，建築量體示意", numbers: "兩處大街廓示範區：中山行政園區（原第一殯儀館，約 1.5 公頃，2024 年拆除後暫作停車場）、南港新行政中心（南港高工周邊，約 0.7 公頃）", before: "公辦都更第一階段意願門檻 75%；基準容積 225%", after: "門檻降為 50%；捷運場站或水岸周邊 3,000 ㎡ 以上基地，基準容積提高至 300%，回饋托育、長照等設施", caveat: "50% 是初期意願門檻，不等於法定同意比例。", sources: src(14, "F1") },
-  { id: "civiclaw", name: "市府 AI 助理 CiviClaw", status: "planned", event: ymd(2027, 12, 1), when: "2027 年底前", approx: true, approxLabel: "標在市政府（示意）", before: "—", after: "全體市府同仁配置 AI Agent", caveat: "成效應以節省工時、正確率、可稽核性與個資保護衡量。", sources: src(23) },
+  { id: "civiclaw", name: "市府 AI 助理 CiviClaw", status: "planned", event: ymd(2027, 12, 1), when: "2027 年底前", pinLabel: "市府 AI 助理", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "全體市府同仁配置 AI Agent", caveat: "成效應以節省工時、正確率、可稽核性與個資保護衡量。", sources: src(23) },
 ];
 
 // 都更: the map count and pin label come from the real case data (public/data/renewal.json)

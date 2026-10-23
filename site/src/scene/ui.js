@@ -18,7 +18,7 @@ export function stopLabel(d) {
   return d >= DATES.plan2027 + 0.3 ? "願景" : "接下來";
 }
 
-export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, onStyle }) {
+export function createUI({ onScrub, onCurtain, onSplit, onPin, onHub, onSkip, onCta, onStyle }) {
   const body = document.body;
 
   // ---------- opening ----------
@@ -119,6 +119,17 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     pinsEl.appendChild(el);
     pins.set(id, { el, anchor, policy, small: el.querySelector("small") });
   }
+  // the citywide policies by City Hall share one pin while their pedestals are too close on screen to tell apart
+  let hub = null;
+  function addHub(anchor, ids) {
+    const el = document.createElement("button");
+    el.className = "pin pin-hub";
+    el.innerHTML = `<i></i><span>臺北市政府・全市政策</span><small>${ids.length} 項</small>`;
+    el.addEventListener("click", () => onHub());
+    pinsEl.appendChild(el);
+    hub = { el, anchor, ids, w: 0, h: 0 };
+  }
+  const HUB_GAP = 120; // px between neighbouring pedestals before each gets its own pin
   const v = new THREE.Vector3();
   const pinRects = [];
   // the interface panels pins and map labels keep clear of (re-measured twice a second: layout reads are not free)
@@ -145,8 +156,41 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     }
     pinRects.length = 0;
     pinRects.push(...panelRects);
+    // the City Hall pin first: grouped while the pedestals crowd together, unless one of them is open in the card
+    let grouped = false;
+    if (hub) {
+      let gap = Infinity,
+        prev = null;
+      for (const id of hub.ids) {
+        v.copy(pins.get(id).anchor).project(camera);
+        const q = [(v.x * 0.5 + 0.5) * w, (-v.y * 0.5 + 0.5) * h];
+        if (prev) gap = Math.min(gap, Math.hypot(q[0] - prev[0], q[1] - prev[1]));
+        prev = q;
+      }
+      grouped = gap < HUB_GAP;
+      const open = hub.ids.some((id) => pins.get(id).el.classList.contains("active"));
+      v.copy(hub.anchor).project(camera);
+      let on = grouped && !open && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+      if (on) {
+        hub.el.style.display = "";
+        if (!hub.w) [hub.w, hub.h] = [hub.el.offsetWidth, hub.el.offsetHeight];
+        const x = (v.x * 0.5 + 0.5) * w,
+          y = (-v.y * 0.5 + 0.5) * h;
+        const r = [x - hub.w / 2, y - 14 - hub.h, x + hub.w / 2, y];
+        if (r[0] < 4 || r[2] > w - 4 || r[1] < 4 || pinRects.some((t) => r[0] < t[2] + 2 && r[2] > t[0] - 2 && r[1] < t[3] && r[3] > t[1])) on = false;
+        else {
+          pinRects.push(r);
+          hub.el.style.transform = `translate(${x}px, ${y - 14}px) translate(-50%, -100%)`;
+        }
+      }
+      hub.el.style.display = on ? "" : "none";
+    }
     // pins in policy order; one that would overlap a pin already placed waits until the view zooms in
     for (const pin of pins.values()) {
+      if (grouped && pin.policy.hub && !pin.el.classList.contains("active")) {
+        pin.el.style.display = "none";
+        continue;
+      }
       v.copy(pin.anchor).project(camera);
       let visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
       const x = (v.x * 0.5 + 0.5) * w,
@@ -181,6 +225,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     for (const pin of pins.values()) pin.el.classList.toggle("active", pin.policy === p);
     card.style.setProperty("--c", cssc(st));
     cardBody.innerHTML = `
+      ${p.hub && hub ? `<button class="card-back" type="button">← 臺北市政府・全市政策</button>` : ""}
       <span class="chip" style="--c:${cssc(st)}">${esc(st.zh)}</span>${p.approx ? `<span class="chip approx">${esc(p.approxLabel || "位置示意")}</span>` : ""}
       <h2>${esc(p.name)}</h2>
       <p class="when">${esc(p.when)}</p>
@@ -192,6 +237,26 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
       <p class="caveat"><b>怎麼讀：</b>${esc(p.caveat)}</p>
       <ul class="sources">${p.sources.map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)} ↗</a></li>`).join("")}</ul>
       <p class="card-more"><a href="/policy/${esc(p.id)}/">完整說明與分享 →</a></p>`;
+    cardBody.querySelector(".card-back")?.addEventListener("click", () => onHub());
+    card.hidden = false;
+  }
+  // the City Hall card: the citywide policies in the order their pedestals stand, each opening its own card
+  function showHub(d) {
+    if (!hub) return;
+    for (const pin of pins.values()) pin.el.classList.remove("active");
+    const list = hub.ids.map((id) => pins.get(id).policy);
+    card.style.setProperty("--c", cssc(STAGE.done));
+    cardBody.innerHTML = `
+      <span class="chip approx">全市適用，展台在市府廣場（示意）</span>
+      <h2>臺北市政府・全市政策</h2>
+      <p class="when">沒有單一地點的政策，依開始時間排在市府廣場的展台上；點選查看上任前後與來源</p>
+      <ul class="policy-list hub-list">${list
+        .map((p) => {
+          const st = stageAt(p, Math.max(d, p.event));
+          return `<li><button data-id="${p.id}" style="--c:${cssc(st)}"><i></i><span><b>${esc(p.name)}</b><em>${esc(st.zh)}</em><small>${esc(p.when)}</small><span class="brief">${esc(p.after)}</span></span></button></li>`;
+        })
+        .join("")}</ul>`;
+    cardBody.querySelectorAll("[data-id]").forEach((b) => b.addEventListener("click", () => onPin(b.dataset.id)));
     card.hidden = false;
   }
   function showCustom(html, mount) {
@@ -229,6 +294,8 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
   return {
     caption,
     addPin,
+    addHub,
+    showHub,
     updatePins,
     pinRects: () => pinRects,
     showPolicy,
@@ -243,6 +310,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
       isGame = game;
       body.classList.toggle("is-game", game);
       for (const pin of pins.values()) pin.w = 0;
+      if (hub) hub.w = 0;
       styleBtn.textContent = game ? "☾ 寫實夜景" : "▦ 模擬城市";
       styleBtn.setAttribute("aria-label", game ? "切換成寫實夜景" : "切換成模擬城市風格");
     },

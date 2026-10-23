@@ -5,8 +5,8 @@
 //   6–8 s    2023.12 the dome opens
 //   8–10 s   2024.02 west along the main streets as YouBike riders appear
 //   10–13 s  2025.09 south to 公館圓環: demolition, then the new crossing
-//   13–17 s  2026 大安路 under works, lunch bowls over the schools, AI Labs; holding on 今天
-//   17–23 s  2027 → 2030+ CiviClaw over City Hall, then north to 松山 as 台北中央公園 and the AI district rise
+//   13–17 s  2026 大安路 under works; holding on 今天 over 大安路, the dome and City Hall's plaza of citywide policies
+//   17–23 s  2027 → 2030+ CiviClaw's pedestal rises at City Hall, then north to 松山 as 台北中央公園 and the AI district rise
 import * as THREE from "three";
 import { U, DATES, smooth, easeInOut } from "./shared.js";
 
@@ -23,9 +23,9 @@ const KEYS = [
   [9.6, [-7, 6, 21], [-3, 0.3, 14]], // down to street level west of the dome: bikes on 忠孝 / 市民大道
   [11.2, [-18, 9, 50], [-13, 0.5, 41]], // south over 大安 toward 公館
   [12.8, [-16.7, 4.5, 49.7], [-14.3, 0.4, 46.1]], // close on 公館圓環 (the junction as the layer snaps it) as it is taken out
-  [15.4, [-12, 8, 21], [-3.9, 0.3, 15.5]], // 大安路 side on, under works, as the campuses round it get their lunch bowls
+  [15.4, [-12, 8, 21], [-3.9, 0.3, 15.5]], // 大安路 side on, under works
   [17.4, [2, 18, 38], [8, 0.5, 19]], // 今天: 大安路, the dome and City Hall's plaza in one view
-  [19.2, [8, 14, 33], [13.8, 0.5, 19]], // City Hall's AI halo lights up
+  [19.2, [8, 14, 33], [13.8, 0.5, 19]], // City Hall: CiviClaw's pedestal rises at the north end of the ring
   [21.2, [-14, 14, 6], [-2, 1, -12]], // 松山: the airport makes way for the park and the AI district
   [DURATION, [-16, 15, 8], [-2, 1, -13]],
 ];
@@ -53,7 +53,7 @@ const DATE_KEYS = [
   [9.6, 2024.25], // YouBike free 30 minutes (2024.02.28) at about 9.2 s
   [11.0, 2025.55],
   [12.8, 2025.78], // 公館圓環: demolition from about 12.1 s, the new crossing at about 12.6 s
-  [15.6, 2026.75], // lunch (2026.08.31) at about 15.4 s; AI Labs and 大安路 works on the way
+  [15.6, 2026.75], // the 2026 pedestals rise at City Hall (lunch 2026.08.31 at about 15.4 s) while 大安路 is under works
   [17.6, DATES.today],
   [19.2, 2028.0], // CiviClaw (end of 2027) at about 19.1 s
   [20.0, 2031.8],

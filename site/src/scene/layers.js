@@ -6,7 +6,7 @@ import { U, DATES, LIGHT_GLSL, mulberry, smooth } from "./shared.js";
 import { project } from "./geo.js";
 import { describeRenewal } from "./policies.js";
 import { ROAD_WIDTH } from "./city.js";
-import { buildBirth, buildElder, buildChildcare, buildWorktime, buildCiviclaw, buildAiEdu, buildLunchCampus, buildUrban5099, buildSidewalk } from "./civic.js";
+import { buildBirth, buildElder, buildChildcare, buildWorktime, buildCiviclaw, buildAiEdu, buildLunch, buildUrban5099, buildSidewalk, hubLayout } from "./civic.js";
 
 const GOLD = new THREE.Color("#ffc56b"),
   CYAN = new THREE.Color("#5fe3ff");
@@ -779,7 +779,9 @@ function buildRenewal(T, p) {
     })
     // and the props of the citywide policies (hospitals, the 大街廓 demonstration sites)
     .concat(T.landmarks.policySites.hospitals.map((h) => ({ c: h.at, r: 1.2 })))
-    .concat(["zhongshan", "nangang"].map((k) => ({ c: centroidOf(ring2(T.landmarks.policySites[k])), r: 1.5 })));
+    .concat(["zhongshan", "nangang"].map((k) => ({ c: centroidOf(ring2(T.landmarks.policySites[k])), r: 1.5 })))
+    // and the plaza of citywide policies east of City Hall
+    .concat([(({ x, z }) => ({ c: [x + 1.6, z], r: 2.4 }))(hubLayout(T))]);
   const inPoly = (x, z, r) => {
     let c = false;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
@@ -1533,26 +1535,6 @@ function pointsLayer(T, list, event, colorBefore, colorAfter, sizeAfter) {
   return pts;
 }
 
-// schools: glowing points in the night city, campuses with lunch bowls in the game city (civic.js)
-function buildSchools(T, p) {
-  const pts = pointsLayer(T, T.geo.schools, p.event, "#c9d3e3", "#ffc56b", 0.9);
-  pts.material.uniforms.uGameHide.value = 1;
-  const campus = buildLunchCampus(T, p);
-  const g = new THREE.Group();
-  g.add(pts, campus.group);
-  const [ax, az] = project(...p.place);
-  return {
-    group: g,
-    anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.2, az),
-    exclusions: campus.exclusions,
-    material: pts.material,
-    update(d, flash) {
-      pts.material.uniforms.uFlash.value = flash;
-      campus.update(d, flash);
-    },
-  };
-}
-
 // YouBike: glowing stations in the night city; in the game city every station is a dock with bikes, riders on the
 // main streets grow in number over the years, and the 願景 adds stations at the new MRT stations, the AI park and
 // the 大街廓 demonstration sites (illustrative)
@@ -1724,7 +1706,7 @@ export const LAYER_BUILDERS = {
   renewal: buildRenewal,
   songshan: buildSongshan,
   autobus: buildAutobus,
-  lunch: buildSchools,
+  lunch: buildLunch,
   youbike: buildYoubike,
 };
 export { buildAnchors };

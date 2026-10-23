@@ -99,6 +99,9 @@ async function start() {
     onPin(id) {
       focusPolicy(id);
     },
+    onHub() {
+      focusHub();
+    },
     onSkip() {
       opening.skip();
     },
@@ -117,8 +120,13 @@ async function start() {
   });
 
   const CURTAIN_VIEW = new THREE.Vector3(2, 3, 18);
-  const FLY_DIST = { dome: 9, gongguan: 5, nvidia: 11, autobus: 12, songshan: 34, eastring: 46, renewal: 34, lunch: 40, youbike: 40 };
+  const FLY_DIST = { dome: 9, gongguan: 5, nvidia: 11, autobus: 12, songshan: 34, eastring: 46, renewal: 34, youbike: 40 };
+  const HUB_DIST = 13, // the whole ring of citywide policies by City Hall
+    PEDESTAL_DIST = 7; // one pedestal with its neighbours, close enough for each to have its own pin
+  // the ring is looked at from the north-west: City Hall in front, 臺北101 behind rather than in the way
+  const HUB_VIEW = new THREE.Vector3(-0.45, 0.65, -0.6);
   for (const [id, l] of world.layers) if (l.anchor) ui.addPin(id, l.anchor, l.policy);
+  ui.addHub(world.hub.anchor, world.hub.ids);
   world.onMilestone((p, ev, label) => {
     if ((mode === "opening" && OPENING_CAPTIONS.includes(p.id)) || dateTween) ui.caption(p, ev, label);
   });
@@ -126,12 +134,20 @@ async function start() {
   function focusPolicy(id) {
     const p = POLICIES.find((q) => q.id === id);
     if (!p) return;
+    ui.showOutro(false);
     ui.showPolicy(p, mainDate);
     const l = world.layers.get(id);
     // on a phone the card covers the lower part of the screen: frame the place in the part above it
-    if (l?.anchor) flyTo(l.anchor, FLY_DIST[id] || 14, innerWidth <= 760 ? 0.22 : 0);
+    if (l?.anchor) flyTo(l.anchor, FLY_DIST[id] || (p.hub ? PEDESTAL_DIST : 14), innerWidth <= 760 ? 0.22 : 0, 0, p.hub ? HUB_VIEW : null);
     // a planned item is only visible once the timeline reaches it
     if (p.status === "planned" && mainDate < p.event) tweenDate(Math.max(p.event + 1.2, STOPS[2]));
+  }
+
+  function focusHub() {
+    ui.showOutro(false);
+    ui.showHub(mainDate);
+    const phone = innerWidth <= 760;
+    flyTo(world.hub.anchor, HUB_DIST, phone ? 0.22 : 0, phone ? 0 : 0.17, HUB_VIEW);
   }
 
   function setCurtain(on) {
@@ -142,13 +158,16 @@ async function start() {
 
   // fly distances are given for the cinematic lens; scale them to the current one
   const lensScale = () => Math.tan(THREE.MathUtils.degToRad(baseFov()) / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-  // lift: how far above the middle of the screen the place should end up (fraction of the screen height)
-  function flyTo(anchor, dist, lift = 0) {
+  // lift: how far above the middle of the screen the place should end up (fraction of the screen height);
+  // side: how far left of the middle (fraction of the width), to keep a wide place clear of the card on the right;
+  // view: a direction to look from instead of the current one
+  function flyTo(anchor, dist, lift = 0, side = 0, view = null) {
     dist *= lensScale();
-    const dir = camera.position.clone().sub(controls.target).normalize();
+    const dir = (view ? view.clone() : camera.position.clone().sub(controls.target)).normalize();
     if (dir.y < 0.5) dir.setY(0.5).normalize();
     const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const toward = new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar((lift * viewH) / Math.max(0.4, dir.y));
+    toward.add(new THREE.Vector3(dir.z, 0, -dir.x).normalize().multiplyScalar(side * viewH * camera.aspect));
     const toT = anchor.clone().setY(anchor.y - dist * 0.05).add(toward);
     fly = {
       t0: performance.now(),
