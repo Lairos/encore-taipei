@@ -25,6 +25,7 @@ export async function createWorld(scene, { quality }) {
   const icons = buildIcons(T);
   scene.add(icons.group);
 
+  T.quality = quality; // layers scale their crowds to it
   const layers = new Map();
   for (const p of POLICIES) {
     const build = LAYER_BUILDERS[p.id];

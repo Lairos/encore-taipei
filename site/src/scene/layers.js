@@ -1,7 +1,8 @@
 // Policy layers. Each layer reads the date (decimal year) and shows the city as it was / is / is planned at that moment.
 // Visual grammar: 起點 = as found, 做到了 = lit and in use, 正在做 = scaffolds and cranes, 接下來 = glowing blueprint.
 import * as THREE from "three";
-import { U, LIGHT_GLSL, mulberry, smooth } from "./shared.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { U, DATES, LIGHT_GLSL, mulberry, smooth } from "./shared.js";
 import { project } from "./geo.js";
 import { describeRenewal } from "./policies.js";
 import { ROAD_WIDTH } from "./city.js";
@@ -514,6 +515,44 @@ function buildEastRing(T, p) {
     e.traverse((o) => o.isMesh && (o.castShadow = true));
     opened.add(e);
   }
+  // the stations bring the street to life: a plaza at each entrance, people streaming in and out, food carts
+  const plazaGeo = [];
+  const cartGeo = [],
+    awningGeo = [];
+  const crowdPaths = [];
+  const prnd = mulberry(61);
+  for (const st of stations) {
+    const ex = st.x + 0.4,
+      ez = st.z - 0.3,
+      yy = T.groundY(ex, ez);
+    plazaGeo.push(new THREE.CircleGeometry(0.75, 28).rotateX(-Math.PI / 2).translate(ex, yy + 0.02, ez));
+    for (let c = 0; c < 2; c++) {
+      const a = prnd() * Math.PI * 2;
+      const cx = ex + Math.cos(a) * 0.62,
+        cz = ez + Math.sin(a) * 0.62;
+      cartGeo.push(box(0.12, 0.07, 0.07, cx, yy + 0.02, cz));
+      awningGeo.push(new THREE.ConeGeometry(0.11, 0.05, 4).rotateY(Math.PI / 4).translate(cx, yy + 0.15, cz));
+    }
+    // each walker goes from the entrance out to a point on the plaza edge and back, at its own pace
+    for (let k = 0; k < 26; k++) {
+      const a = prnd() * Math.PI * 2;
+      crowdPaths.push({ x0: ex, z0: ez, x1: ex + Math.cos(a) * (0.5 + prnd() * 0.35), z1: ez + Math.sin(a) * (0.5 + prnd() * 0.35), y: yy + 0.02, p: prnd(), v: 0.08 + prnd() * 0.1 });
+    }
+  }
+  const plazas = new THREE.Mesh(mergeGeometries(plazaGeo), new THREE.MeshLambertMaterial({ color: 0xece4d4 }));
+  plazas.receiveShadow = true;
+  const carts = new THREE.Group();
+  carts.add(new THREE.Mesh(mergeGeometries(cartGeo), new THREE.MeshLambertMaterial({ color: 0xf4f4f0 })), new THREE.Mesh(mergeGeometries(awningGeo), new THREE.MeshLambertMaterial({ color: 0xff7a59 })));
+  const NWALK = crowdPaths.length;
+  const walkers = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.022, 0.05, 2, 6).translate(0, 0.05, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), NWALK);
+  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.02, 8, 6).translate(0, 0.11, 0), new THREE.MeshLambertMaterial({ color: 0xf2c9a0 }), NWALK);
+  const coats = ["#2e6be6", "#ff5d73", "#ffd23f", "#5cd68a", "#1d3557", "#ff8a3d", "#f4f4f0"].map((h) => new THREE.Color(h));
+  for (let i = 0; i < NWALK; i++) walkers.setColorAt(i, coats[i % coats.length]);
+  opened.add(plazas, carts, walkers, heads);
+  const wm = new THREE.Matrix4(),
+    wv = new THREE.Vector3(),
+    ws = new THREE.Vector3(1.4, 1.4, 1.4),
+    wq = new THREE.Quaternion();
   const CARS = 4,
     TRAINS = 8;
   const trains = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.09, 0.32, 3, 8).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 0 }), CARS * TRAINS);
@@ -532,7 +571,7 @@ function buildEastRing(T, p) {
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.4, mid.z),
-    exclusions: stations.map((st) => ({ x: st.x + 0.4, z: st.z - 0.3, r: 0.45 })),
+    exclusions: stations.map((st) => ({ x: st.x + 0.4, z: st.z - 0.3, r: 0.8 })),
     update(d, flash) {
       mat.uniforms.uFlash.value = flash;
       const done = d >= p.done;
@@ -554,6 +593,14 @@ function buildEastRing(T, p) {
             trains.setMatrixAt(k * CARS + c, tm);
           }
         trains.instanceMatrix.needsUpdate = true;
+        crowdPaths.forEach((c, i) => {
+          const u = (c.p + t * c.v) % 2;
+          const f = u < 1 ? u : 2 - u; // out and back
+          wm.compose(wv.set(c.x0 + (c.x1 - c.x0) * f, c.y, c.z0 + (c.z1 - c.z0) * f), wq, ws);
+          walkers.setMatrixAt(i, wm);
+          heads.setMatrixAt(i, wm);
+        });
+        walkers.instanceMatrix.needsUpdate = heads.instanceMatrix.needsUpdate = true;
       }
       for (const c of cranes) {
         c.visible = d >= c.userData.date && !done;
@@ -662,7 +709,8 @@ function buildNvidia(T, p) {
 // ---------- 都市更新: one scaffold per renewal unit approved since 上任那天 (都更處 open data, placed in its land section) ----------
 // years from approving a renewal unit to the new building, for the 願景 picture only: a typical span for the
 // steps after approval (business plan, review, rights conversion, demolition, construction), not a case schedule
-const REBUILD = 8;
+const REBUILD = 8,
+  BUILD_FROM = 5; // construction in about the last three of those years
 function buildRenewal(T, p) {
   const rnd = mulberry(353);
   // [x, z, approved (decimal year), sqrt(area ha), approved flag, case ID]; cases are placed within their land section,
@@ -717,7 +765,7 @@ function buildRenewal(T, p) {
         varying vec3 vL; varying float vGrow; varying vec3 vNrm;
         void main() {
           // the scaffold comes up on approval and comes down when the unit is rebuilt (illustrative, see REBUILD)
-          float grow = smoothstep(aEvent, aEvent + 0.12, uDate) * (1.0 - step(aEvent + ${REBUILD.toFixed(1)}, uDate));
+          float grow = smoothstep(aEvent, aEvent + 0.12, uDate) * (1.0 - step(aEvent + ${BUILD_FROM.toFixed(1)}, uDate));
           vGrow = grow;
           vec3 p = position; p.y *= grow;
           vL = (position + vec3(0.5, 0.0, 0.5)) * aSize; vL.y *= grow; vNrm = normal;
@@ -762,7 +810,7 @@ function buildRenewal(T, p) {
     oldBody.setMatrixAt(i, mo);
     mo.compose(new THREE.Vector3(x, y + 0.26, z), q, new THREE.Vector3(w * 0.45, 0.07, dd * 0.5));
     oldRoof.setMatrixAt(i, mo);
-    poses.push({ x, y, z, q, w, dd, h: 0.6 + rnd() * 0.7, d });
+    poses.push({ x, y, z, q, w, dd, h: 1.5 + rnd() * 1.0, d, ang: rnd() * Math.PI * 2 });
     ev[i] = d;
     size.set([w, h, dd], i * 3);
   }
@@ -771,12 +819,25 @@ function buildRenewal(T, p) {
     o.castShadow = o.receiveShadow = true;
     old.add(o);
   }
-  // rebuilt (game city): a taller block with a glass base and a roof garden
-  const newBody = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0xf3f1ea }), n);
-  const newBase = new THREE.InstancedMesh(new THREE.BoxGeometry(1.04, 1, 1.04).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0x8fb9d8 }), n);
+  // rebuilt (game city): a taller glass tower on a white podium, white bands, a sky garden part-way up, a roof
+  // garden and a lit crown — so the renewed city reads at a glance; under construction: a concrete frame and a crane
+  const unit = () => new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const newGlass = new THREE.MeshLambertMaterial({ color: 0x7cc6d8, emissive: 0xbfe6ff, emissiveIntensity: 0 });
+  const newBody = new THREE.InstancedMesh(unit(), newGlass, n);
+  const newBase = new THREE.InstancedMesh(unit(), new THREE.MeshLambertMaterial({ color: 0xf6f4ee }), n);
+  // white bands and corner fins: the silhouette that tells a new building from the old city
+  const finParts = [new THREE.BoxGeometry(1.04, 0.035, 1.04).translate(0, 0.33, 0)];
+  for (const [fx, fz] of [[0.5, 0.5], [0.5, -0.5], [-0.5, 0.5], [-0.5, -0.5]]) finParts.push(new THREE.BoxGeometry(0.08, 1, 0.08).translate(fx, 0.5, fz));
+  const newBands = new THREE.InstancedMesh(mergeGeometries(finParts), new THREE.MeshLambertMaterial({ color: 0xf6f4ee }), n);
+  const newSky = new THREE.InstancedMesh(new THREE.BoxGeometry(0.96, 0.06, 0.96).translate(0, 0.62, 0), new THREE.MeshLambertMaterial({ color: 0x6db24f }), n);
   const newRoof = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.04, 0.9).translate(0, 0.02, 0), new THREE.MeshLambertMaterial({ color: 0x7cc05a }), n);
+  const crownM = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.9, 1.5, 0.6) });
+  const newCrown = new THREE.InstancedMesh(new THREE.BoxGeometry(1.08, 0.07, 1.08), crownM, n);
+  const frame = new THREE.InstancedMesh(unit(), new THREE.MeshLambertMaterial({ color: 0xb4b1aa }), n);
+  const craneMast = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 1, 0.05).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0xffa040, emissive: 0xff7a20, emissiveIntensity: 0.4 }), n);
+  const craneJib = new THREE.InstancedMesh(new THREE.BoxGeometry(1.0, 0.04, 0.04).translate(0.3, 0, 0), new THREE.MeshLambertMaterial({ color: 0xffa040, emissive: 0xff7a20, emissiveIntensity: 0.4 }), n);
   const rebuilt = new THREE.Group();
-  for (const o of [newBody, newBase, newRoof]) {
+  for (const o of [newBody, newBase, newBands, newSky, newRoof, newCrown, frame, craneMast, craneJib]) {
     o.castShadow = o.receiveShadow = true;
     rebuilt.add(o);
   }
@@ -799,33 +860,50 @@ function buildRenewal(T, p) {
     pv = new THREE.Vector3(),
     ps = new THREE.Vector3();
   let lastD = -1;
+  const jq = new THREE.Quaternion(),
+    up = new THREE.Vector3(0, 1, 0);
   const setRebuilt = (date) => {
     if (Math.abs(date - lastD) < 1e-4) return;
     lastD = date;
-    poses.forEach(({ x, y, z, q, w, dd, h, d }, i) => {
-      const done = date >= d + REBUILD;
+    poses.forEach(({ x, y, z, q, w, dd, h, d, ang }, i) => {
+      const done = date >= d + REBUILD,
+        building = !done && date >= d + BUILD_FROM;
+      const tw = w * 0.72,
+        td = dd * 0.72;
       if (done) {
-        newBody.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.75, h, dd * 0.75)));
-        newBase.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.8, 0.12, dd * 0.8)));
-        newRoof.setMatrixAt(i, pm.compose(pv.set(x, y + h, z), q, ps.set(w * 0.75, 1, dd * 0.75)));
+        newBody.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(tw, h, td)));
+        newBase.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.85, 0.14, dd * 0.85)));
+        newBands.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(tw, h, td)));
+        newSky.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(tw, h, td)));
+        newRoof.setMatrixAt(i, pm.compose(pv.set(x, y + h, z), q, ps.set(tw, 1, td)));
+        newCrown.setMatrixAt(i, pm.compose(pv.set(x, y + h + 0.05, z), q, ps.set(tw, 1, td)));
+      } else for (const o of [newBody, newBase, newBands, newSky, newRoof, newCrown]) o.setMatrixAt(i, zero);
+      if (building) {
+        const f = (date - d - BUILD_FROM) / (REBUILD - BUILD_FROM);
+        frame.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(tw, Math.max(0.05, h * f), td)));
+        craneMast.setMatrixAt(i, pm.compose(pv.set(x + w * 0.45, y, z + dd * 0.45), q, ps.set(1, h + 0.4, 1)));
+        craneJib.setMatrixAt(i, pm.compose(pv.set(x + w * 0.45, y + h + 0.4, z + dd * 0.45), jq.setFromAxisAngle(up, ang), ps.set(1, 1, 1)));
+      } else for (const o of [frame, craneMast, craneJib]) o.setMatrixAt(i, zero);
+      // the old walk-up stands until the works begin
+      if (done || building) {
         oldBody.setMatrixAt(i, zero);
         oldRoof.setMatrixAt(i, zero);
       } else {
-        for (const o of [newBody, newBase, newRoof]) o.setMatrixAt(i, zero);
         oldBody.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.8, 0.26, dd * 0.8)));
         oldRoof.setMatrixAt(i, pm.compose(pv.set(x, y + 0.26, z), q, ps.set(w * 0.45, 0.07, dd * 0.5)));
       }
     });
-    for (const o of [newBody, newBase, newRoof, oldBody, oldRoof]) o.instanceMatrix.needsUpdate = true;
+    for (const o of [newBody, newBase, newBands, newSky, newRoof, newCrown, frame, craneMast, craneJib, oldBody, oldRoof]) o.instanceMatrix.needsUpdate = true;
   };
   return {
     group: g,
     anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.6, az),
-    exclusions: sites.map(([x, z]) => ({ x, z, r: 0.35 })),
+    exclusions: sites.map(([x, z]) => ({ x, z, r: 0.45 })),
     update(d, flash) {
       mesh.material.uniforms.uFlash.value = flash;
       old.visible = rebuilt.visible = U.uGame.value > 0.5;
       if (old.visible) setRebuilt(d);
+      newGlass.emissiveIntensity = 0.35 * U.uNight.value;
     },
   };
 }
@@ -1094,6 +1172,109 @@ function buildSongshan(T, p) {
     for (const im of [towerBody, towerFrame, towerRoof, dataBody, homeBody, homeRoof]) im.instanceMatrix.needsUpdate = true;
   };
   place(0);
+  // ---- what makes it read as an AI district: a neural hologram over the hub, drone swarms, data beams between the
+  // towers, LED bands and masts, solar roofs on the data centres, lit smart streets and driverless delivery pods ----
+  const tech = new THREE.Group();
+  const cyanGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.6, 2.2) });
+  const magentaGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.45, 1.6) });
+  // hologram: a wireframe "brain" turning over the hub, with a glowing core and orbiting rings
+  const holo = new THREE.Group();
+  holo.position.set(hubX, topY + 2.2, hubZ);
+  const holoShell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 1.4, 2.0), wireframe: true, transparent: true, opacity: 0.85 }));
+  const holoCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), cyanGlow);
+  const holoRings = [0, 1, 2].map((i) => {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(1.0 + i * 0.18, 0.018, 6, 64), i === 1 ? magentaGlow : cyanGlow);
+    r.rotation.set(Math.PI / 2 + i * 0.5, i * 0.7, 0);
+    return r;
+  });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.32, 2.2, 16, 1, true).translate(0, -1.1, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 1.2, 1.8), transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+  holo.add(holoShell, holoCore, beam, ...holoRings);
+  tech.add(holo);
+  // LED bands round the towers and masts with red lights on the tallest
+  const bandGeo = [],
+    mastGeo = [];
+  for (const [, x, z, w, d, h] of towers) {
+    for (const f of [0.35, 0.7]) bandGeo.push(new THREE.BoxGeometry(w * 1.03, 0.035, d * 1.03).translate(x, topY + h * f, z));
+    if (h > 1.8) mastGeo.push(new THREE.CylinderGeometry(0.015, 0.025, 0.5, 6).translate(x, topY + h + 0.25, z));
+  }
+  const bands = new THREE.Mesh(mergeGeometries(bandGeo), cyanGlow);
+  const masts = new THREE.Mesh(mergeGeometries(mastGeo.length ? mastGeo : [new THREE.BoxGeometry(0, 0, 0)]), new THREE.MeshLambertMaterial({ color: 0xdfe5ea }));
+  tech.add(bands, masts);
+  const mastTips = new THREE.Group();
+  for (const [, x, z, , , h] of towers.filter((t) => t[5] > 1.8)) {
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.4, 0.3) }));
+    tip.position.set(x, topY + h + 0.5, z);
+    mastTips.add(tip);
+  }
+  tech.add(mastTips);
+  // solar arrays and cooling units on the data centres
+  const solar = [];
+  for (const [, x, z, w, d, h] of datas)
+    for (let i = -2; i <= 2; i++) solar.push(new THREE.BoxGeometry(w * 0.16, 0.02, d * 0.7).rotateZ(0.25).translate(x + (i * w) / 5.5, topY + h + 0.05, z));
+  tech.add(new THREE.Mesh(mergeGeometries(solar), new THREE.MeshLambertMaterial({ color: 0x24406b })));
+  // data beams: arcs from the hub to the tower tops, dashes running along them
+  const arcPts = [];
+  for (const [, x, z, , , h] of towers) {
+    const a0 = new THREE.Vector3(hubX, topY + 0.8, hubZ),
+      a1 = new THREE.Vector3(x, topY + h, z);
+    const midP = a0.clone().lerp(a1, 0.5).add(new THREE.Vector3(0, 1.0, 0));
+    const pts = new THREE.QuadraticBezierCurve3(a0, midP, a1).getPoints(40);
+    for (let i = 1; i < pts.length; i++) arcPts.push(pts[i - 1], pts[i]);
+  }
+  const arcMat = new THREE.LineDashedMaterial({ color: new THREE.Color(0.4, 1.6, 2.2), dashSize: 0.06, gapSize: 0.06 });
+  const arcs = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(arcPts), arcMat);
+  arcs.computeLineDistances();
+  tech.add(arcs);
+  const arcMats = [arcMat];
+  // smart streets: lit edge lines along the district's roads
+  const smart = [];
+  for (const rx of [0.02 * L, L * 0.3]) for (const sd of [-1, 1]) smart.push(new THREE.BoxGeometry(0.025, 0.01, southW).translate(rx + sd * 0.15, topY + 0.06, southZ));
+  for (const sd of [-1, 1]) smart.push(new THREE.BoxGeometry(aiL, 0.01, 0.025).translate(aiX, topY + 0.06, southZ + sd * 0.11));
+  tech.add(new THREE.Mesh(mergeGeometries(smart), cyanGlow));
+  // drones: small quadcopters circling the towers, lights blinking
+  const droneParts = [new THREE.BoxGeometry(0.1, 0.03, 0.1)];
+  for (const [dx, dz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) droneParts.push(new THREE.CylinderGeometry(0.045, 0.045, 0.008, 10).translate(dx * 0.07, 0.02, dz * 0.07));
+  const NDRONES = 40;
+  const drones = new THREE.InstancedMesh(mergeGeometries(droneParts), new THREE.MeshLambertMaterial({ color: 0xf4f6f8, emissive: 0x5fe3ff, emissiveIntensity: 0.6 }), NDRONES);
+  const droneRoutes = Array.from({ length: NDRONES }, (_, i) => {
+    const t = towers[i % towers.length];
+    return { cx: t ? t[1] : hubX, cz: t ? t[2] : hubZ, r: 0.6 + rnd() * 0.9, y: topY + 1.2 + rnd() * 2.2, w: (0.4 + rnd() * 0.5) * (rnd() < 0.5 ? 1 : -1), p: rnd() * 6.28 };
+  });
+  tech.add(drones);
+  // driverless delivery pods along the district's streets
+  const NPODS = 18;
+  const pods = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.05, 0.08, 3, 8).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x5fe3ff, emissiveIntensity: 0.3 }), NPODS);
+  const podRoutes = Array.from({ length: NPODS }, (_, i) => ({ along: i % 2 === 0, off: (rnd() - 0.5) * 0.08, p: rnd(), v: (0.03 + rnd() * 0.03) * (rnd() < 0.5 ? 1 : -1) }));
+  tech.add(pods);
+  vision.add(tech);
+  const tm = new THREE.Matrix4(),
+    tv = new THREE.Vector3(),
+    tq = new THREE.Quaternion(),
+    ts = new THREE.Vector3(1, 1, 1);
+  const animateTech = (shown) => {
+    tech.visible = shown > 0.01;
+    if (!tech.visible) return;
+    const t = U.uTime.value;
+    holo.scale.setScalar(shown);
+    holoShell.rotation.set(t * 0.2, t * 0.35, 0);
+    holoCore.scale.setScalar(1 + Math.sin(t * 3) * 0.12);
+    holoRings.forEach((r, i) => (r.rotation.z = t * (0.4 + i * 0.25) * (i % 2 ? -1 : 1)));
+    for (const lm of arcMats) lm.dashOffset = -t * 0.6;
+    droneRoutes.forEach((r, i) => {
+      const a = r.p + t * r.w;
+      tm.compose(tv.set(r.cx + Math.cos(a) * r.r, r.y + Math.sin(t * 2 + i) * 0.05, r.cz + Math.sin(a) * r.r), tq.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, -a), ts.setScalar(1.4));
+      drones.setMatrixAt(i, tm);
+    });
+    drones.instanceMatrix.needsUpdate = true;
+    drones.material.emissiveIntensity = 0.4 + 0.6 * (Math.sin(t * 6) > 0 ? 1 : 0);
+    podRoutes.forEach((r, i) => {
+      const u = (((r.p + t * r.v) % 1) + 1) % 1;
+      if (r.along) tm.compose(tv.set(aiX - aiL / 2 + u * aiL, topY + 0.09, southZ + r.off), tq.identity(), ts.setScalar(1));
+      else tm.compose(tv.set(0.02 * L + r.off, topY + 0.09, southZ - southW / 2 + u * southW), tq.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.PI / 2), ts.setScalar(1));
+      pods.setMatrixAt(i, tm);
+    });
+    pods.instanceMatrix.needsUpdate = true;
+  };
   g.add(airport, vision);
   return {
     group: g,
@@ -1112,6 +1293,7 @@ function buildSongshan(T, p) {
       districtTrees.visible = k > 0.6;
       hub.scale.set(1, Math.max(0.001, smooth(0.5, 0.95, k)), 1);
       place(smooth(0.2, 1, k) * 1.6);
+      animateTech(smooth(0.85, 1, k));
       const night = U.uNight.value;
       glassM.emissiveIntensity = 0.45 * night + flash * 0.4;
       homeM.emissiveIntensity = 0.35 * night;
@@ -1293,11 +1475,79 @@ function buildSchools(T, p) {
   };
 }
 
-// YouBike: the stations, and from 2024.02.28 bikes riding the main streets of the game city
+// YouBike: glowing stations in the night city; in the game city every station is a dock with bikes, riders on the
+// main streets grow in number over the years, and the 願景 adds stations at the new MRT stations, the AI park and
+// the 大街廓 demonstration sites (illustrative)
+const dockGeometry = () => {
+  const yellow = [new THREE.BoxGeometry(0.24, 0.02, 0.035).translate(0, 0.01, 0)],
+    dark = [];
+  for (const bx of [-0.07, 0, 0.07]) {
+    yellow.push(new THREE.BoxGeometry(0.012, 0.03, 0.075).translate(bx, 0.05, 0.03));
+    for (const wz of [0, 0.06]) dark.push(new THREE.CylinderGeometry(0.02, 0.02, 0.006, 6).rotateZ(Math.PI / 2).translate(bx, 0.03, wz));
+  }
+  return [mergeGeometries(yellow), mergeGeometries(dark)];
+};
 function buildYoubike(T, p) {
   const pts = pointsLayer(T, T.geo.youbike, p.event, "#c9d3e3", "#5fffe0", 0.42);
+  pts.material.uniforms.uGameHide.value = 1;
   const [ax, az] = project(...p.place);
   const rnd = mulberry(23);
+  // docks, by map tile so the camera can skip the ones it cannot see
+  const [yellowGeo, darkGeo] = dockGeometry();
+  const yellowM = new THREE.MeshLambertMaterial({ color: 0xffc233 }),
+    darkM = new THREE.MeshLambertMaterial({ color: 0x2d3436 });
+  const docks = new THREE.Group();
+  const tiles = new Map();
+  for (const [x, z] of T.geo.youbike) {
+    const k = `${Math.floor(x / 48)},${Math.floor(z / 48)}`;
+    if (!tiles.has(k)) tiles.set(k, []);
+    tiles.get(k).push([x, z]);
+  }
+  const dm = new THREE.Matrix4(),
+    dq = new THREE.Quaternion(),
+    dUp = new THREE.Vector3(0, 1, 0),
+    dv = new THREE.Vector3(),
+    dsc = new THREE.Vector3(1.6, 1.6, 1.6);
+  for (const list of tiles.values())
+    for (const [geo, m] of [[yellowGeo, yellowM], [darkGeo, darkM]]) {
+      const im = new THREE.InstancedMesh(geo, m, list.length);
+      list.forEach(([x, z], i) => im.setMatrixAt(i, dm.compose(dv.set(x, T.groundY(x, z) + 0.01, z), dq.setFromAxisAngle(dUp, (x * 7.3 + z * 3.1) % 6.28), dsc)));
+      im.computeBoundingSphere();
+      docks.add(im);
+    }
+  // stations the 願景 adds (illustrative): beside each 東環段 entrance, round the AI park, at the demonstration sites
+  const extra = [];
+  const er = T.landmarks.eastring.stations;
+  const erDone = 2032.5;
+  for (const st of er) for (const [ox, oz] of [[0.9, -0.1], [-0.2, -0.9]]) extra.push([st.x + ox, st.z + oz, erDone]);
+  const rw = T.geo.airport.runway;
+  const [r0x, r0z, r1x, r1z] = [rw[0], rw[1], rw[rw.length - 2], rw[rw.length - 1]];
+  for (let i = 0; i < 10; i++) {
+    const f = (i + 0.5) / 10;
+    extra.push([r0x + (r1x - r0x) * f, r0z + (r1z - r0z) * f + (i % 2 ? 1.6 : -2.4), 2032.9]);
+  }
+  for (const key of ["zhongshan", "nangang"]) {
+    const r = ring2(T.landmarks.policySites[key]);
+    const [cx, cz] = centroidOf(r);
+    extra.push([cx + 1.0, cz + 0.6, 2032.0], [cx - 1.0, cz - 0.6, 2032.0]);
+  }
+  const extraYellow = new THREE.InstancedMesh(yellowGeo, yellowM, extra.length),
+    extraDark = new THREE.InstancedMesh(darkGeo, darkM, extra.length);
+  extraYellow.frustumCulled = extraDark.frustumCulled = false;
+  docks.add(extraYellow, extraDark);
+  let lastExtra = -1;
+  const zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
+  const showExtra = (d) => {
+    const n = extra.filter((e) => d >= e[2]).length;
+    if (n === lastExtra) return;
+    lastExtra = n;
+    extra.forEach(([x, z, from], i) => {
+      const m = d >= from ? dm.compose(dv.set(x, T.groundY(x, z) + 0.01, z), dq.setFromAxisAngle(dUp, i * 1.3), dsc) : zeroM;
+      extraYellow.setMatrixAt(i, m);
+      extraDark.setMatrixAt(i, m);
+    });
+    extraYellow.instanceMatrix.needsUpdate = extraDark.instanceMatrix.needsUpdate = true;
+  };
   const roads = [];
   for (const r of T.geo.roads) {
     if (r[0] < 2) continue; // primary and secondary streets, not motorways
@@ -1307,7 +1557,7 @@ function buildYoubike(T, p) {
     for (let i = 1; i < line.length; i++) lens.push(lens[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
     if (lens.at(-1) > 1.5 && T.inCity(...line[0])) roads.push({ pts: line, lens, total: lens.at(-1), c: r[0] });
   }
-  const N = 260;
+  const N = T.quality === "high" ? 760 : 360; // riders at the 願景; fewer before (see share below)
   const riders = Array.from({ length: N }, () => {
     const r = roads[Math.floor(rnd() * roads.length)];
     return { r, s: rnd() * r.total, v: (0.12 + rnd() * 0.08) * (rnd() < 0.5 ? 1 : -1), seg: 0 };
@@ -1315,19 +1565,21 @@ function buildYoubike(T, p) {
   // a chunky bike: yellow frame, two black wheels, a rider (sizes exaggerated, as the cars are)
   const parts = [
     [new THREE.BoxGeometry(0.1, 0.02, 0.012).translate(0, 0.045, 0), "#ffc233"],
-    [new THREE.TorusGeometry(0.025, 0.008, 4, 10).translate(-0.04, 0.03, 0), "#2d3436"],
-    [new THREE.TorusGeometry(0.025, 0.008, 4, 10).translate(0.04, 0.03, 0), "#2d3436"],
+    [new THREE.CylinderGeometry(0.025, 0.025, 0.008, 8).rotateX(Math.PI / 2).translate(-0.04, 0.03, 0), "#2d3436"],
+    [new THREE.CylinderGeometry(0.025, 0.025, 0.008, 8).rotateX(Math.PI / 2).translate(0.04, 0.03, 0), "#2d3436"],
     [new THREE.CapsuleGeometry(0.013, 0.04, 2, 6).translate(-0.005, 0.085, 0), "#2e6be6"],
     [new THREE.SphereGeometry(0.014, 8, 6).translate(-0.005, 0.125, 0), "#f2c9a0"],
   ];
   const bikes = parts.map(([geo, c]) => {
     const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: c }), N);
     im.frustumCulled = false;
-    im.castShadow = true;
     return im;
   });
   const g = new THREE.Group();
-  g.add(pts, ...bikes);
+  g.add(pts, docks, ...bikes);
+  // share of riders on the streets: some before the free 30 minutes, more after it, most once the new lines and
+  // districts open (illustrative)
+  const share = (d) => (d < p.event ? 0.25 : d < DATES.today ? 0.25 + 0.35 * smooth(p.event, DATES.today, d) : 0.6 + 0.4 * smooth(DATES.today, DATES.vision, d));
   const m = new THREE.Matrix4(),
     q = new THREE.Quaternion(),
     up = new THREE.Vector3(0, 1, 0),
@@ -1341,12 +1593,20 @@ function buildYoubike(T, p) {
     material: pts.material,
     update(d, flash) {
       pts.material.uniforms.uFlash.value = flash;
-      const on = d >= p.event && U.uGame.value > 0.5;
-      for (const b of bikes) b.visible = on;
+      const game = U.uGame.value > 0.5;
+      docks.visible = game;
+      if (game) showExtra(d);
+      const on = game;
+      const count = Math.round(N * share(d));
+      for (const b of bikes) {
+        b.visible = on;
+        b.count = count;
+      }
       const dt = Math.min(0.1, U.uTime.value - last);
       last = U.uTime.value;
       if (!on || dt <= 0) return;
       riders.forEach((c, i) => {
+        if (i >= count) return;
         const r = c.r;
         c.s = (c.s + c.v * dt + r.total) % r.total;
         while (c.seg > 0 && r.lens[c.seg] > c.s) c.seg--;
