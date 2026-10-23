@@ -358,8 +358,12 @@ for (const e of (await json("schools.json")).elements) {
   const c = e.center || e;
   highSchools.push([...project(c.lat, c.lon).map(r2), n]);
 }
+// 仁愛路 bus lane (the longest busway way): where 自駕公車 is planned to run from 2027
+const busways = ps.filter((e) => e.type === "way" && e.tags?.highway === "busway" && /仁愛路/.test(e.tags.name || "")).sort((x, y) => y.geometry.length - x.geometry.length);
+const busway = busways.length ? flat(simplify(local(busways[0].geometry), 0.02)) : [];
 const policySites = {
   hospitals,
+  busway,
   sidewalk: flat(sidewalk),
   highSchools,
   zhongshan: flat(outlineOf(byId(136053052))), // former 第一殯儀館, now 臺北市第一停車場 (民權東路二段 145 號)
@@ -381,6 +385,6 @@ await writeFile(out, JSON.stringify(lm));
 const byDistrict = {};
 for (const i of icons) (byDistrict[i.district] ??= new Set()).add(i.name);
 for (const [d, names] of Object.entries(byDistrict)) console.log(`  ${d}: ${[...names].join("、")}`);
-console.log(`policy sites: ${hospitals.length} hospitals, ${highSchools.length} high schools, 大安路 ${sidewalk.length} pts`);
+console.log(`policy sites: ${hospitals.length} hospitals, ${highSchools.length} high schools, 大安路 ${sidewalk.length} pts, 仁愛路 busway ${busway.length / 2} pts`);
 console.log(`icons ${icons.length}, parks ${parks.length}, gondola ${cable.length} towers / ${gondola.stations.map((s) => s.name).join(" ")}`);
 console.log(`dome ${lm.dome.a}×${lm.dome.b} @${lm.dome.angle}, stations ${S.map((s) => s.id).join(" ")}`);

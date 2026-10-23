@@ -433,6 +433,7 @@ export function buildUrban5099(T, p) {
   const g = new THREE.Group();
   const sites = [];
   const DEMOLISHED = 2024.8; // 第一殯儀館 closed and was cleared in 2024 (中央社, 2024.05 estimate: June–November)
+  const BUILT = 2032.0; // shown built in the 願景 picture
   for (const [key, towers] of [
     ["zhongshan", [[0, 0, 1.4, 0.9], [0.55, 0.35, 0.9, 0.55]]],
     ["nangang", [[0, 0, 1.2, 0.8]]],
@@ -452,15 +453,23 @@ export function buildUrban5099(T, p) {
     const old = new THREE.Group();
     if (key === "zhongshan") for (const [ox, oz, w, d] of [[-0.3, -0.2, 0.6, 0.35], [0.35, 0.25, 0.5, 0.4], [-0.25, 0.45, 0.45, 0.3]]) old.add(mesh(box(w, 0.16, d, ox, 0, oz), toon("#a9a39a")));
     s.add(old);
-    // the plan: blueprint towers (容積 300%) over a podium of public services
+    // the plan: blueprint towers (容積 300%) over a podium of public services; built in the 願景 picture
     const plan = new THREE.Group();
     const bp = blueprintMat();
     for (const [ox, oz, h, w] of towers) plan.add(mesh(box(w, h, w * 0.8, ox, 0.2, oz), bp, false));
     plan.add(mesh(box(1.5, 0.2, 1.1, 0.15, 0, 0.1), bp, false));
+    const built = new THREE.Group();
+    for (const [ox, oz, h, w] of towers) {
+      built.add(mesh(box(w, h, w * 0.8, ox, 0.2, oz), toon("#9cc3df")));
+      built.add(mesh(box(w * 1.03, 0.04, w * 0.83, ox, 0.2 + h * 0.5, oz), toon("#f4f6f7")));
+      built.add(mesh(box(w * 0.85, 0.04, w * 0.68, ox, 0.2 + h, oz), toon("#7cc05a")));
+    }
+    built.add(mesh(box(1.5, 0.2, 1.1, 0.15, 0, 0.1), toon("#f1ece2")));
+    s.add(built);
     const pods = ["#ff7a59", "#5cd68a", "#ffd23f", "#38b6ff"]; // 托育・長照日照・圖書館・運動中心
     pods.forEach((c, i) => plan.add(mesh(box(0.22, 0.2, 0.22, -0.6 + i * 0.4, 0, 0.75), toon(c))));
     s.add(plan);
-    sites.push({ s, old, plan, key, lot, marked });
+    sites.push({ s, old, plan, built, key, lot, marked });
     g.add(s);
   }
   const a = sites[0].s.position;
@@ -469,15 +478,18 @@ export function buildUrban5099(T, p) {
     anchor: new THREE.Vector3(a.x, a.y + 2.2, a.z),
     exclusions: sites.map(({ s }) => ({ x: s.position.x, z: s.position.z, r: 0.95 })),
     update(d, flash) {
-      for (const { s, old, plan, key, lot, marked } of sites) {
+      for (const { s, old, plan, built, key, lot, marked } of sites) {
         gameOnly(s);
         old.visible = key === "zhongshan" && d < DEMOLISHED;
         lot.visible = key === "zhongshan";
         marked.visible = d >= p.event;
         const k = smooth(p.event, p.event + 0.6, d);
-        plan.visible = k > 0.01;
+        const b = smooth(BUILT - 0.6, BUILT, d); // illustrative: no construction timetable yet
+        plan.visible = k > 0.01 && b < 0.99;
         plan.scale.set(1, Math.max(0.001, k), 1);
         plan.position.y = flash * 0.05;
+        built.visible = b > 0.01;
+        built.scale.set(1, Math.max(0.001, b), 1);
       }
     },
   };

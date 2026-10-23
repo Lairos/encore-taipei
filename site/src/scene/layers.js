@@ -458,10 +458,10 @@ function buildEastRing(T, p) {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uDate: U.uDate, uFlash: { value: 0 }, uTime: U.uTime, uNight: U.uNight, uGame: U.uGame },
+    uniforms: { uDate: U.uDate, uFlash: { value: 0 }, uTime: U.uTime, uNight: U.uNight, uGame: U.uGame, uDone: { value: 0 } },
     vertexShader: `attribute float aStart; varying vec2 vUv; varying float vStart; void main(){ vUv = uv; vStart = aStart; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */ `
-      uniform float uDate; uniform float uFlash; uniform float uTime; uniform float uNight; uniform float uGame; varying vec2 vUv; varying float vStart;
+      uniform float uDate; uniform float uFlash; uniform float uTime; uniform float uNight; uniform float uGame; uniform float uDone; varying vec2 vUv; varying float vStart;
       void main() {
         float t = vUv.x;
         float on = smoothstep(vStart - 0.01, vStart + 0.03, uDate);
@@ -470,8 +470,10 @@ function buildEastRing(T, p) {
         float pulse = smoothstep(0.9, 1.0, fract(t * 28.0 - uTime * 0.5));
         vec3 build = vec3(1.0, 0.54, 0.24) * (0.9 + pulse * 2.2);
         vec3 col = mix(planned, build, on) * (0.6 + 0.4 * uNight) + vec3(1.0, 0.7, 0.4) * uFlash * on;
+        // in service: the Circular Line's yellow
+        col = mix(col, vec3(1.0, 0.82, 0.1) * (0.8 + 0.6 * uNight), uDone);
         gl_FragColor = vec4(col, 1.0);
-        if (uGame > 0.5) gl_FragColor = vec4(mix(vec3(0.97), mix(vec3(0.92, 0.38, 0.06), vec3(0.98), step(0.5, fract(t * 400.0))), on), mix(dash * 0.85, 1.0, on));
+        if (uGame > 0.5) gl_FragColor = vec4(mix(mix(vec3(0.97), mix(vec3(0.92, 0.38, 0.06), vec3(0.98), step(0.5, fract(t * 400.0))), on), vec3(1.0, 0.8, 0.06), uDone), mix(mix(dash * 0.85, 1.0, on), 1.0, uDone));
       }`,
   }));
   const tube = new THREE.Mesh(geo, mat);
@@ -498,15 +500,63 @@ function buildEastRing(T, p) {
     cranes.push(c);
     g.add(c);
   }
+  // in service (target 2032): station entrances in the line colour, and trains running the (underground) route
+  const opened = new THREE.Group();
+  const pavM = new THREE.MeshLambertMaterial({ color: 0xf4f4f0 }),
+    roofM = new THREE.MeshLambertMaterial({ color: 0xffcc1a, emissive: 0xffb300, emissiveIntensity: 0 });
+  for (const st of stations) {
+    const yy = T.groundY(st.x, st.z);
+    const e = new THREE.Group();
+    // a glass entrance under a yellow canopy, and the line's sign on a pole
+    e.add(new THREE.Mesh(box(0.5, 0.2, 0.32, 0, 0, 0), pavM), new THREE.Mesh(box(0.62, 0.06, 0.44, 0, 0.2, 0), roofM));
+    e.add(new THREE.Mesh(box(0.03, 0.55, 0.03, 0.38, 0, 0.2), pavM), new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 20).rotateX(Math.PI / 2).translate(0.38, 0.6, 0.2), roofM));
+    e.position.set(st.x + 0.4, yy, st.z - 0.3);
+    e.traverse((o) => o.isMesh && (o.castShadow = true));
+    opened.add(e);
+  }
+  const CARS = 4,
+    TRAINS = 8;
+  const trains = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.09, 0.32, 3, 8).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 0 }), CARS * TRAINS);
+  for (let i = 0; i < CARS * TRAINS; i++) trains.setColorAt(i, new THREE.Color(i % CARS === 0 ? "#ffcc1a" : "#f4f4f0"));
+  trains.castShadow = true;
+  opened.add(trains);
+  g.add(opened);
+  const tm = new THREE.Matrix4(),
+    tq = new THREE.Quaternion(),
+    tv = new THREE.Vector3(),
+    tan = new THREE.Vector3(),
+    one = new THREE.Vector3(1, 1, 1),
+    xAxis = new THREE.Vector3(1, 0, 0);
+  const curveLen = curve.getLength();
   const mid = byId.Y35;
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.4, mid.z),
-    exclusions: [],
+    exclusions: stations.map((st) => ({ x: st.x + 0.4, z: st.z - 0.3, r: 0.45 })),
     update(d, flash) {
       mat.uniforms.uFlash.value = flash;
+      const done = d >= p.done;
+      mat.uniforms.uDone.value = done ? 1 : 0;
+      opened.visible = done;
+      if (done) {
+        roofM.emissiveIntensity = 0.5 * U.uNight.value;
+        trains.material.emissiveIntensity = 0.4 * U.uNight.value;
+        const t = U.uTime.value;
+        for (let k = 0; k < TRAINS; k++)
+          for (let c = 0; c < CARS; c++) {
+            // trains run both ways, spaced along the line
+            const dir = k % 2 ? 1 : -1;
+            const u = (((k / TRAINS + dir * t * 0.012 - (c * 0.42 * dir) / curveLen) % 1) + 1) % 1;
+            curve.getPointAt(u, tv);
+            curve.getTangentAt(u, tan);
+            tq.setFromUnitVectors(xAxis, tan);
+            tm.compose(tv.setY(tv.y + 0.17), tq, one);
+            trains.setMatrixAt(k * CARS + c, tm);
+          }
+        trains.instanceMatrix.needsUpdate = true;
+      }
       for (const c of cranes) {
-        c.visible = d >= c.userData.date;
+        c.visible = d >= c.userData.date && !done;
         c.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.25 + c.userData.phase) * 1.2;
       }
     },
@@ -564,23 +614,55 @@ function buildNvidia(T, p) {
   const crane = makeCrane(2.4);
   crane.position.set(inset[0][0], y, inset[0][1]);
   site.add(crane);
-  g.add(lot, hq, ring, site);
+  // under construction (from the end of 2026): the concrete frame rises; finished (2030): the transparent glass HQ
+  const local = hqGeo.clone().translate(0, -y, 0);
+  const frame = new THREE.Mesh(local, new THREE.MeshLambertMaterial({ color: 0xb9b7b0 }));
+  frame.position.y = y;
+  const glassHQ = new THREE.Group();
+  const glassM = new THREE.MeshStandardMaterial({ color: 0xa9d4ee, roughness: 0.12, metalness: 0.35, transparent: true, opacity: 0.88, emissive: 0x9fd8ff, emissiveIntensity: 0 });
+  glassHQ.add(new THREE.Mesh(hqGeo, glassM), new THREE.LineSegments(new THREE.EdgesGeometry(hqGeo, 20), new THREE.LineBasicMaterial({ color: 0xf4f8fb })));
+  // the grounds once it opens: trees round the building
+  const groundsTrees = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.75, 0).translate(0, 0.85, 0), new THREE.MeshLambertMaterial({ color: 0x5fae4a, flatShading: true }), 40);
+  const tm4 = new THREE.Matrix4();
+  for (let i = 0; i < 40; i++) {
+    const [ax, az] = siteRing[i % siteRing.length],
+      [bx, bz] = siteRing[(i + 1) % siteRing.length];
+    const f = (i * 0.37) % 1;
+    const px = ax + (bx - ax) * f + (cx - ax) * 0.06,
+      pz = az + (bz - az) * f + (cz - az) * 0.06;
+    tm4.compose(new THREE.Vector3(px, y, pz), new THREE.Quaternion(), new THREE.Vector3(0.14, 0.15, 0.14));
+    groundsTrees.setMatrixAt(i, tm4);
+  }
+  for (const o of [frame, glassHQ.children[0], groundsTrees]) o.castShadow = o.receiveShadow = true;
+  glassHQ.add(groundsTrees);
+  g.add(lot, hq, ring, site, frame, glassHQ);
   return {
     group: g,
     anchor: new THREE.Vector3(cx, y + 2.0, cz),
     exclusions: [{ x: cx, z: cz, r: 1.6 }],
     update(d, flash) {
-      const signed = d >= p.event;
+      const signed = d >= p.event,
+        building = d >= p.works,
+        open = d >= p.done;
       ring.material.uniforms.uA.value = signed ? 0.6 + flash * 2.5 : 0;
-      hq.visible = signed;
-      site.visible = signed;
+      // signed: the design as a blueprint over the fenced lot; then the frame goes up; then the glass building
+      hq.visible = signed && !building;
+      hq.userData.u.uProgress.value = 0.35 + 0.65 * smooth(p.event, p.works, d);
+      site.visible = signed && !open;
+      crane.visible = building && !open;
       crane.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.2) * 1.4;
-      hq.userData.u.uProgress.value = 0.35 + 0.65 * smooth(p.event, 2028, d);
+      frame.visible = building && !open;
+      frame.scale.y = Math.max(0.001, smooth(p.works, p.done - 0.3, d));
+      glassHQ.visible = open;
+      glassM.emissiveIntensity = 0.4 * U.uNight.value + flash * 0.3;
     },
   };
 }
 
 // ---------- 都市更新: one scaffold per renewal unit approved since 上任那天 (都更處 open data, placed in its land section) ----------
+// years from approving a renewal unit to the new building, for the 願景 picture only: a typical span for the
+// steps after approval (business plan, review, rights conversion, demolition, construction), not a case schedule
+const REBUILD = 8;
 function buildRenewal(T, p) {
   const rnd = mulberry(353);
   // [x, z, approved (decimal year), sqrt(area ha), approved flag, case ID]; cases are placed within their land section,
@@ -634,7 +716,8 @@ function buildRenewal(T, p) {
         uniform float uDate;
         varying vec3 vL; varying float vGrow; varying vec3 vNrm;
         void main() {
-          float grow = smoothstep(aEvent, aEvent + 0.12, uDate);
+          // the scaffold comes up on approval and comes down when the unit is rebuilt (illustrative, see REBUILD)
+          float grow = smoothstep(aEvent, aEvent + 0.12, uDate) * (1.0 - step(aEvent + ${REBUILD.toFixed(1)}, uDate));
           vGrow = grow;
           vec3 p = position; p.y *= grow;
           vL = (position + vec3(0.5, 0.0, 0.5)) * aSize; vL.y *= grow; vNrm = normal;
@@ -664,6 +747,7 @@ function buildRenewal(T, p) {
   const oldBody = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0xa59d92 }), n);
   const oldRoof = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0x6f8fa6 }), n);
   const mo = new THREE.Matrix4();
+  const poses = [];
   for (let i = 0; i < n; i++) {
     const [x, z, d, side] = sites[i];
     // footprint follows the unit's area (√ha × 100 m = side in world units), kept readable at city scale
@@ -678,6 +762,7 @@ function buildRenewal(T, p) {
     oldBody.setMatrixAt(i, mo);
     mo.compose(new THREE.Vector3(x, y + 0.26, z), q, new THREE.Vector3(w * 0.45, 0.07, dd * 0.5));
     oldRoof.setMatrixAt(i, mo);
+    poses.push({ x, y, z, q, w, dd, h: 0.6 + rnd() * 0.7, d });
     ev[i] = d;
     size.set([w, h, dd], i * 3);
   }
@@ -685,6 +770,15 @@ function buildRenewal(T, p) {
   for (const o of [oldBody, oldRoof]) {
     o.castShadow = o.receiveShadow = true;
     old.add(o);
+  }
+  // rebuilt (game city): a taller block with a glass base and a roof garden
+  const newBody = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0xf3f1ea }), n);
+  const newBase = new THREE.InstancedMesh(new THREE.BoxGeometry(1.04, 1, 1.04).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0x8fb9d8 }), n);
+  const newRoof = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.04, 0.9).translate(0, 0.02, 0), new THREE.MeshLambertMaterial({ color: 0x7cc05a }), n);
+  const rebuilt = new THREE.Group();
+  for (const o of [newBody, newBase, newRoof]) {
+    o.castShadow = o.receiveShadow = true;
+    rebuilt.add(o);
   }
   geo.setAttribute("aEvent", new THREE.InstancedBufferAttribute(ev, 1));
   geo.setAttribute("aSize", new THREE.InstancedBufferAttribute(size, 3));
@@ -699,14 +793,39 @@ function buildRenewal(T, p) {
   }
   describeRenewal(p, T.renewal);
   const g = new THREE.Group();
-  g.add(old, mesh);
+  g.add(old, rebuilt, mesh);
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0),
+    pm = new THREE.Matrix4(),
+    pv = new THREE.Vector3(),
+    ps = new THREE.Vector3();
+  let lastD = -1;
+  const setRebuilt = (date) => {
+    if (Math.abs(date - lastD) < 1e-4) return;
+    lastD = date;
+    poses.forEach(({ x, y, z, q, w, dd, h, d }, i) => {
+      const done = date >= d + REBUILD;
+      if (done) {
+        newBody.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.75, h, dd * 0.75)));
+        newBase.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.8, 0.12, dd * 0.8)));
+        newRoof.setMatrixAt(i, pm.compose(pv.set(x, y + h, z), q, ps.set(w * 0.75, 1, dd * 0.75)));
+        oldBody.setMatrixAt(i, zero);
+        oldRoof.setMatrixAt(i, zero);
+      } else {
+        for (const o of [newBody, newBase, newRoof]) o.setMatrixAt(i, zero);
+        oldBody.setMatrixAt(i, pm.compose(pv.set(x, y, z), q, ps.set(w * 0.8, 0.26, dd * 0.8)));
+        oldRoof.setMatrixAt(i, pm.compose(pv.set(x, y + 0.26, z), q, ps.set(w * 0.45, 0.07, dd * 0.5)));
+      }
+    });
+    for (const o of [newBody, newBase, newRoof, oldBody, oldRoof]) o.instanceMatrix.needsUpdate = true;
+  };
   return {
     group: g,
     anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.6, az),
     exclusions: sites.map(([x, z]) => ({ x, z, r: 0.35 })),
     update(d, flash) {
       mesh.material.uniforms.uFlash.value = flash;
-      old.visible = U.uGame.value > 0.5;
+      old.visible = rebuilt.visible = U.uGame.value > 0.5;
+      if (old.visible) setRebuilt(d);
     },
   };
 }
@@ -813,126 +932,246 @@ function buildSongshan(T, p) {
   const lights = new THREE.Points(lg, new THREE.PointsMaterial({ color: new THREE.Color(2.0, 1.6, 1.0), size: 0.09, sizeAttenuation: true }));
   airport.add(lights);
 
-  // vision: a 300 ha (≈300 unit²) site aligned with the runway, split 100 / 90 / 110 ha
+  // vision (市府 2026.10.08): 300 ha aligned with the runway. 台北中央公園 (110 ha) runs along the north side to the
+  // 基隆河; the AI 產業聚落 (100 ha) and the 國際永續生活聚落 (90 ha) share the south side (which goes where is
+  // illustrative). 基河路, 建業三路 and 北安路 cross the site towards the city centre.
   const W = 300 / (len + 2);
   const L = len + 2;
-  const zones = [
-    { ha: 100, color: CYAN, game: new THREE.Color("#2d7ff9"), kind: "ai" },
-    { ha: 90, color: new THREE.Color("#b8d8ff"), game: new THREE.Color("#f2994a"), kind: "home" },
-    { ha: 110, color: new THREE.Color("#7dffb0"), game: new THREE.Color("#3cb371"), kind: "park" },
-  ];
   const vision = new THREE.Group();
   vision.position.set(mid.x, 0, mid.y);
-  vision.rotation.y = -ang;
+  vision.rotation.y = -ang; // local +x runs along the runway towards its west end, local +z is north
   const baseY = yAt(mid.x, mid.y);
-  // the zone plates sit just above the highest ground in the site so the terrain never pokes through
+  // the ground plates sit just above the highest ground in the site so the terrain never pokes through
   let topY = baseY;
   for (let u = -L / 2; u <= L / 2; u += 0.5)
     for (let v = -W / 2; v <= W / 2; v += 0.5) topY = Math.max(topY, yAt(mid.x + u * Math.cos(ang) - v * Math.sin(ang), mid.y + u * Math.sin(ang) + v * Math.cos(ang)));
   const rnd = mulberry(8);
-  let off = -L / 2;
-  const blueprints = [];
-  for (const zn of zones) {
-    const zl = (zn.ha / 300) * L;
-    const cx = off + zl / 2;
-    off += zl;
-    const plate = new THREE.Mesh(
-      new THREE.PlaneGeometry(zl - 0.3, W - 0.3).rotateX(-Math.PI / 2),
-      glow(new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: zn.color }, uGameColor: { value: zn.game }, uA: { value: 0 }, uGame: U.uGame },
-        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-        fragmentShader: /* glsl */ `
-          uniform vec3 uColor; uniform vec3 uGameColor; uniform float uA; uniform float uGame; varying vec2 vUv;
-          void main() {
-            vec2 e = min(vUv, 1.0 - vUv);
-            float border = 1.0 - smoothstep(0.0, 0.012, min(e.x, e.y));
-            vec2 gr = abs(fract(vUv * vec2(24.0, 10.0)) - 0.5);
-            float grid = (1.0 - smoothstep(0.0, 0.04, min(gr.x, gr.y))) * 0.12;
-            gl_FragColor = uGame > 0.5 ? vec4(mix(uGameColor, vec3(1.0), border * 0.55 + grid * 1.5), clamp((border * 1.2 + grid * 1.5 + 0.4) * uA, 0.0, 0.85)) : vec4(uColor * (border * 1.6 + grid + 0.05) * uA, 1.0);
-          }`,
-      })),
-    );
-    plate.renderOrder = 3;
-    plate.position.set(cx, topY + 0.03, 0);
-    vision.add(plate);
-    zn.plate = plate;
-    const geoms = [];
-    if (zn.kind === "ai") {
-      for (let i = 0; i < 9; i++) {
-        const h = 1.2 + rnd() * 3.2;
-        geoms.push(box(0.7 + rnd() * 0.5, h, 0.7 + rnd() * 0.5, cx + (rnd() - 0.5) * (zl - 1.6), 0, (rnd() - 0.5) * (W - 2.2)));
-      }
-    } else if (zn.kind === "home") {
-      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) geoms.push(box(1.1, 0.8 + rnd() * 0.9, 0.55, cx + i * (zl / 3.4), 0, j * (W / 3.6)));
-    }
-    if (geoms.length) {
-      const bp = blueprint(geoms, zn.color, baseY, 4.4);
-      bp.position.y = baseY;
-      vision.add(bp);
-      blueprints.push(bp);
-    } else {
-      // park: a field of soft green points
-      const tp = [];
-      for (let i = 0; i < 420; i++) tp.push(cx + (rnd() - 0.5) * (zl - 0.6), baseY + 0.12 + rnd() * 0.18, (rnd() - 0.5) * (W - 0.6));
-      const pg = new THREE.BufferGeometry();
-      pg.setAttribute("position", new THREE.Float32BufferAttribute(tp, 3));
-      zn.trees = new THREE.Points(pg, glow(new THREE.PointsMaterial({ color: new THREE.Color(0.5, 2.0, 1.0), size: 0.16, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
-      vision.add(zn.trees);
-      const tg = new THREE.IcosahedronGeometry(0.75, 0).scale(1, 1.1, 1).translate(0, 0.85, 0);
-      zn.gameTrees = new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({ color: 0x5fae4a, flatShading: true }), 160);
-      const m4 = new THREE.Matrix4();
-      for (let i = 0; i < 160; i++) {
-        const s = 0.14 + rnd() * 0.12;
-        m4.compose(new THREE.Vector3(cx + (rnd() - 0.5) * (zl - 0.8), topY, (rnd() - 0.5) * (W - 0.8)), new THREE.Quaternion(), new THREE.Vector3(s, s, s));
-        zn.gameTrees.setMatrixAt(i, m4);
-      }
-      zn.gameTrees.castShadow = true;
-      vision.add(zn.gameTrees);
-    }
+  const parkW = (W * 110) / 300,
+    southW = W - parkW,
+    southZ = -W / 2 + southW / 2,
+    parkZ = W / 2 - parkW / 2;
+  const aiL = (L * 100) / 190,
+    aiX = L / 2 - aiL / 2, // west part of the south side
+    homeL = L - aiL,
+    homeX = -L / 2 + homeL / 2;
+  const flatMat = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const plate = (w, d, x, z, c, lift = 0) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), flatMat(c));
+    m.position.set(x, topY + 0.03 + lift, z);
+    m.receiveShadow = true;
+    return m;
+  };
+  const ground = new THREE.Group();
+  ground.add(plate(L, parkW, 0, parkZ, "#86c25f"), plate(aiL, southW, aiX, southZ, "#d9dde1"), plate(homeL, southW, homeX, southZ, "#eee3cf"));
+  // 台北中央公園: lakes, paths, groves
+  for (const [lx, lz, rx, rz] of [
+    [-L * 0.22, parkZ + parkW * 0.05, 2.4, 0.9],
+    [L * 0.25, parkZ - parkW * 0.1, 1.6, 0.7],
+  ])
+    ground.add(new THREE.Mesh(new THREE.CircleGeometry(1, 40).scale(rx, rz, 1).rotateX(-Math.PI / 2).translate(lx, topY + 0.045, lz), flatMat("#5fb6d9")));
+  ground.add(plate(L - 0.6, 0.08, 0, parkZ, "#efe1c3", 0.012), plate(0.08, parkW - 0.4, -L * 0.05, parkZ, "#efe1c3", 0.012));
+  // roads: the three cross-river corridors (N–S) and an east–west street along the park edge and through the south side
+  const roads = new THREE.Group();
+  for (const rx of [-L * 0.3, 0.02 * L, L * 0.3]) roads.add(plate(0.28, W, rx, 0, "#55595e", 0.02));
+  roads.add(plate(L, 0.24, 0, W / 2 - parkW, "#55595e", 0.02), plate(L, 0.2, 0, southZ, "#55595e", 0.02));
+  vision.add(ground, roads);
+  // the park's trees, in the game city and (as soft lights) in the night city
+  const nTrees = 520;
+  const treeGeo = new THREE.IcosahedronGeometry(0.75, 0).scale(1, 1.1, 1).translate(0, 0.85, 0);
+  const parkTrees = new THREE.InstancedMesh(treeGeo, new THREE.MeshLambertMaterial({ color: 0x5fae4a, flatShading: true }), nTrees);
+  const m4 = new THREE.Matrix4(),
+    q4 = new THREE.Quaternion(),
+    v4 = new THREE.Vector3(),
+    s4 = new THREE.Vector3();
+  const lakes = [
+    [-L * 0.22, parkZ + parkW * 0.05, 2.6, 1.1],
+    [L * 0.25, parkZ - parkW * 0.1, 1.8, 0.9],
+  ];
+  let placed = 0;
+  while (placed < nTrees) {
+    const tx = (rnd() - 0.5) * (L - 0.6),
+      tz = parkZ + (rnd() - 0.5) * (parkW - 0.5);
+    if (lakes.some(([lx, lz, rx, rz]) => ((tx - lx) / rx) ** 2 + ((tz - lz) / rz) ** 2 < 1)) continue;
+    const s = 0.12 + rnd() * 0.1;
+    parkTrees.setMatrixAt(placed++, m4.compose(v4.set(tx, topY, tz), q4, s4.set(s, s, s)));
   }
+  parkTrees.castShadow = true;
+  vision.add(parkTrees);
+
+  // buildings: instanced bodies and roofs per kind, each rising in turn as the vision is built
+  const glassM = new THREE.MeshLambertMaterial({ color: 0x8fb9d8, emissive: 0x9fd8ff, emissiveIntensity: 0 });
+  const frameM = new THREE.MeshLambertMaterial({ color: 0xf2f4f5 });
+  const gardenM = new THREE.MeshLambertMaterial({ color: 0x7cc05a });
+  const dataM = new THREE.MeshLambertMaterial({ color: 0xc9ced3 });
+  const homeM = new THREE.MeshLambertMaterial({ color: 0xf6efe3, emissive: 0xffd59a, emissiveIntensity: 0 });
+  const homeRoofs = ["#e07a5f", "#5cb8a6", "#f2c14e", "#7a9cc6", "#c06c84"].map((h) => new THREE.Color(h));
+  const items = []; // [kind, x, z, w, d, h, roofColor]
+  // AI cluster: a ring of glass towers round a central plaza, data centres along the east–west street
+  const cols = 5,
+    rows = 2;
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++) {
+      const x = aiX - aiL / 2 + ((i + 0.5) / cols) * aiL + (rnd() - 0.5) * 0.4,
+        z = southZ + (j === 0 ? -1 : 1) * southW * 0.24;
+      if (Math.abs(x - 0.02 * L) < 0.7 || Math.abs(x - L * 0.3) < 0.7) continue; // keep the corridors clear
+      if (Math.abs(x - (aiX + aiL * 0.02)) < 1.4) continue; // and the hub
+      const h = 0.9 + rnd() * 1.9 + (i === 2 ? 1.2 : 0);
+      items.push(["tower", x, z, 0.75 + rnd() * 0.35, 0.65 + rnd() * 0.3, h]);
+    }
+  for (let i = 0; i < 4; i++) items.push(["data", aiX - aiL / 2 + ((i + 0.5) / 4) * aiL, southZ - southW * 0.44, 1.0, 0.36, 0.28]);
+  // living community: mid-rise blocks round courtyards
+  for (let i = 0; i < 6; i++)
+    for (let j = 0; j < 3; j++) {
+      const x = homeX - homeL / 2 + ((i + 0.5) / 6) * homeL,
+        z = southZ + (j - 1) * southW * 0.3;
+      if (Math.abs(x + L * 0.3) < 0.55) continue;
+      items.push(["home", x + (rnd() - 0.5) * 0.25, z, 0.9 + rnd() * 0.3, 0.42, 0.45 + rnd() * 0.45, homeRoofs[(i + j) % homeRoofs.length]]);
+    }
+  // street trees in the two districts, between the buildings
+  const nDistrictTrees = 220;
+  const districtTrees = new THREE.InstancedMesh(treeGeo, new THREE.MeshLambertMaterial({ color: 0x6db24f, flatShading: true }), nDistrictTrees);
+  for (let i = 0; i < nDistrictTrees; i++) {
+    let tx, tz;
+    for (let tries = 0; tries < 20; tries++) {
+      tx = (rnd() - 0.5) * (L - 0.6);
+      tz = southZ + (rnd() - 0.5) * (southW - 0.4);
+      if (!items.some(([, ix, iz, w, d]) => Math.abs(tx - ix) < w / 2 + 0.12 && Math.abs(tz - iz) < d / 2 + 0.12)) break;
+    }
+    const sc = 0.09 + rnd() * 0.05;
+    districtTrees.setMatrixAt(i, m4.compose(v4.set(tx, topY, tz), q4, s4.set(sc, sc, sc)));
+  }
+  districtTrees.castShadow = true;
+  vision.add(districtTrees);
+  // the AI district's centrepiece: a ring-shaped glass hub round a green court (illustrative)
+  const hubX = aiX + aiL * 0.02,
+    hubZ = southZ;
+  const hub = new THREE.Group();
+  hub.add(new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.22, 10, 48).rotateX(Math.PI / 2).scale(1, 1.6, 1).translate(0, 0.36, 0), glassM));
+  hub.add(new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.05, 6, 48).rotateX(Math.PI / 2).translate(0, 0.72, 0), frameM));
+  hub.add(new THREE.Mesh(new THREE.CircleGeometry(0.6, 32).rotateX(-Math.PI / 2).translate(0, 0.02, 0), gardenM));
+  hub.position.set(hubX, topY, hubZ);
+  hub.traverse((o) => o.isMesh && (o.castShadow = o.receiveShadow = true));
+  vision.add(hub);
+  const byKind = (k) => items.filter((it) => it[0] === k);
+  const inst = (geo, mat, list) => {
+    const im = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
+    im.castShadow = im.receiveShadow = true;
+    vision.add(im);
+    return im;
+  };
+  const unit = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const towers = byKind("tower"),
+    datas = byKind("data"),
+    homes = byKind("home");
+  const towerBody = inst(unit, glassM, towers),
+    towerFrame = inst(new THREE.BoxGeometry(1.04, 0.05, 1.04).translate(0, 0.5, 0), frameM, towers),
+    towerRoof = inst(new THREE.BoxGeometry(0.9, 0.04, 0.9).translate(0, 0.02, 0), gardenM, towers),
+    dataBody = inst(unit, dataM, datas),
+    homeBody = inst(unit, homeM, homes),
+    homeRoof = inst(new THREE.BoxGeometry(1.06, 0.06, 1.1).translate(0, 0.03, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), homes);
+  homes.forEach((it, i) => homeRoof.setColorAt(i, it[6]));
+  const order = items.map((it, i) => ({ it, delay: rnd() * 0.6 }));
+  let lastK = -1;
+  const place = (k) => {
+    if (Math.abs(k - lastK) < 1e-4) return;
+    lastK = k;
+    const counters = { tower: 0, data: 0, home: 0 };
+    for (const { it, delay } of order) {
+      const [kind, x, z, w, d, h] = it;
+      const grow = THREE.MathUtils.clamp((k - delay) / 0.4, 0, 1);
+      const hh = Math.max(0.001, h * grow);
+      const i = counters[kind]++;
+      if (kind === "tower") {
+        towerBody.setMatrixAt(i, m4.compose(v4.set(x, topY, z), q4, s4.set(w, hh, d)));
+        towerFrame.setMatrixAt(i, m4.compose(v4.set(x, topY + hh * 0.55, z), q4, s4.set(w, grow, d)));
+        towerRoof.setMatrixAt(i, m4.compose(v4.set(x, topY + hh, z), q4, s4.set(w, grow, d)));
+      } else if (kind === "data") dataBody.setMatrixAt(i, m4.compose(v4.set(x, topY, z), q4, s4.set(w, hh, d)));
+      else {
+        homeBody.setMatrixAt(i, m4.compose(v4.set(x, topY, z), q4, s4.set(w, hh, d)));
+        homeRoof.setMatrixAt(i, m4.compose(v4.set(x, topY + hh, z), q4, s4.set(w, grow, d)));
+      }
+    }
+    for (const im of [towerBody, towerFrame, towerRoof, dataBody, homeBody, homeRoof]) im.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
   g.add(airport, vision);
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, baseY + 5.2, mid.y),
     exclusions: [{ rect: true, x: mid.x, z: mid.y, w: L / 2 + 0.3, d: W / 2 + 0.3 }],
     update(d, flash) {
+      // the airport makes way, then the park greens and the districts rise
       const k = smooth(p.event, p.event + 0.9, d);
       vision.visible = k > 0.001;
       airport.visible = k < 0.999;
       apronMat.opacity = runway.material.opacity = 1 - k;
       apronMat.transparent = runway.material.transparent = k > 0;
       lights.visible = k < 0.5;
-      for (const zn of zones) {
-        zn.plate.material.uniforms.uA.value = k * (0.8 + flash);
-        if (zn.trees) {
-          const game = U.uGame.value > 0.5;
-          zn.trees.visible = !game;
-          zn.trees.material.opacity = k;
-          zn.gameTrees.visible = game && k > 0.6;
-        }
-      }
-      for (const bp of blueprints) bp.userData.u.uProgress.value = smooth(p.event + 0.2, p.event + 1.2, d);
+      ground.position.y = (1 - smooth(0, 0.3, k)) * -0.06;
+      parkTrees.visible = k > 0.25;
+      districtTrees.visible = k > 0.6;
+      hub.scale.set(1, Math.max(0.001, smooth(0.5, 0.95, k)), 1);
+      place(smooth(0.2, 1, k) * 1.6);
+      const night = U.uNight.value;
+      glassM.emissiveIntensity = 0.45 * night + flash * 0.4;
+      homeM.emissiveIntensity = 0.35 * night;
     },
   };
 }
 
-// ---------- 自駕公車示範 (planned): a small loop at 北士科 with a moving shuttle ----------
+// ---------- 自駕公車 (planned, 2027 下半年): driverless buses on the 北士科 demonstration loop and the 仁愛路 bus lane ----------
+// routes illustrative; the buses: white with a blue band, dark windows and a sensor pod on the roof
+function busModel() {
+  const b = new THREE.Group();
+  const white = new THREE.MeshLambertMaterial({ color: 0xf6f7f8, emissive: 0xffffff, emissiveIntensity: 0 }),
+    band = new THREE.MeshLambertMaterial({ color: 0x2e6be6 }),
+    glass = new THREE.MeshLambertMaterial({ color: 0x2d3e50, emissive: 0xfff0c8, emissiveIntensity: 0 }),
+    sensor = new THREE.MeshLambertMaterial({ color: 0x5fe3ff, emissive: 0x2aa8d6, emissiveIntensity: 0.6 });
+  b.add(new THREE.Mesh(box(0.42, 0.13, 0.15, 0, 0.02, 0), white));
+  b.add(new THREE.Mesh(box(0.43, 0.05, 0.155, 0, 0.08, 0), glass));
+  b.add(new THREE.Mesh(box(0.43, 0.025, 0.155, 0, 0.035, 0), band));
+  b.add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.03, 10).translate(0.12, 0.165, 0), sensor));
+  for (const wx of [-0.13, 0.13]) for (const wz of [-0.075, 0.075]) b.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 10).rotateX(Math.PI / 2).translate(wx, 0.03, wz), new THREE.MeshLambertMaterial({ color: 0x2d3436 })));
+  b.traverse((o) => o.isMesh && (o.castShadow = true));
+  b.userData.lit = [white, glass];
+  return b;
+}
 function buildAutobus(T, p) {
   const site = ring2(T.landmarks.nvidia.site);
   const [sx, sz] = centroidOf(site);
   const [x, z] = [sx + 3.2, sz + 1.2]; // demonstration loop beside the 北士科 site (illustrative)
-  const y = T.groundY(x, z) + 0.08;
-  const curve = new THREE.EllipseCurve(0, 0, 2.6, 1.6, 0, Math.PI * 2);
-  const pts = curve.getSpacedPoints(120).map((v) => new THREE.Vector3(x + v.x, y, z + v.y));
-  const lineMat = new THREE.LineDashedMaterial({ color: new THREE.Color(0.8, 2.2, 2.6), dashSize: 0.15, gapSize: 0.1, transparent: true });
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
-  line.computeLineDistances();
-  const bus = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.14), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 3.0, 3.4) }));
+  const y = T.groundY(x, z) + 0.06;
+  const loop = new THREE.EllipseCurve(0, 0, 2.6, 1.6, 0, Math.PI * 2);
+  const routes = [];
+  const loopPts = loop.getSpacedPoints(160).map((v) => new THREE.Vector3(x + v.x, y, z + v.y));
+  routes.push({ curve: new THREE.CatmullRomCurve3(loopPts, true), buses: 2, speed: 0.05, closed: true });
+  // 仁愛路 bus lane (OpenStreetMap busway)
+  const bw = ring2(T.landmarks.policySites.busway || []);
+  if (bw.length > 1) {
+    const lanePts = bw.map(([bx, bz]) => new THREE.Vector3(bx, T.groundY(bx, bz) + 0.05, bz));
+    routes.push({ curve: new THREE.CatmullRomCurve3(lanePts, false, "centripetal"), buses: 4, speed: 0.025, closed: false });
+  }
   const g = new THREE.Group();
-  g.add(line, bus);
+  const lineMats = [];
+  const buses = [];
+  for (const r of routes) {
+    const lm = new THREE.LineDashedMaterial({ color: new THREE.Color(0.8, 2.2, 2.6), dashSize: 0.15, gapSize: 0.1, transparent: true });
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(r.curve.getSpacedPoints(300)), lm);
+    line.computeLineDistances();
+    lineMats.push(lm);
+    g.add(line);
+    for (let k = 0; k < r.buses; k++) {
+      const b = busModel();
+      b.userData.route = r;
+      b.userData.phase = k / r.buses;
+      b.userData.dir = r.closed || k % 2 === 0 ? 1 : -1;
+      b.scale.setScalar(1.3);
+      buses.push(b);
+      g.add(b);
+    }
+  }
+  const v = new THREE.Vector3(),
+    tan = new THREE.Vector3();
   return {
     group: g,
     anchor: new THREE.Vector3(x + 2.6, y + 1.2, z),
@@ -940,12 +1179,26 @@ function buildAutobus(T, p) {
     update(d) {
       const on = smooth(p.event, p.event + 0.15, d);
       g.visible = on > 0.01;
-      lineMat.opacity = on;
-      const t = (U.uTime.value * 0.05) % 1;
-      const a = curve.getPointAt(t),
-        b = curve.getPointAt((t + 0.01) % 1);
-      bus.position.set(x + a.x, y + 0.07, z + a.y);
-      bus.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+      for (const lm of lineMats) lm.opacity = on * (1 - 0.6 * U.uGame.value);
+      const t = U.uTime.value;
+      for (const b of buses) {
+        const { route, phase, dir } = b.userData;
+        // round the loop; back and forth along the bus lane (half the buses start the other way)
+        let u,
+          back = false;
+        if (route.closed) u = (t * route.speed + phase) % 1;
+        else {
+          const s2 = (t * route.speed * 2 + phase * 2 + (dir < 0 ? 1 : 0)) % 2;
+          back = s2 >= 1;
+          u = back ? 2 - s2 : s2;
+        }
+        route.curve.getPointAt(u, v);
+        route.curve.getTangentAt(u, tan);
+        if (back) tan.negate();
+        b.position.copy(v);
+        b.rotation.y = Math.atan2(-tan.z, tan.x);
+        for (const m of b.userData.lit) m.emissiveIntensity = 0.35 * U.uNight.value;
+      }
     },
   };
 }

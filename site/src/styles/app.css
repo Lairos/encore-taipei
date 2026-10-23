@@ -388,6 +388,13 @@ body.is-opening .hud {
   margin-bottom: 8px;
   flex-wrap: wrap;
 }
+.future-note {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 99px;
+  color: var(--planned);
+  border: 1px solid color-mix(in srgb, var(--planned) 50%, transparent);
+}
 .legend i {
   display: inline-block;
   width: 8px;

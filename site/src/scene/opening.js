@@ -1,4 +1,4 @@
-// The opening, about 22 seconds: a chronological tour of what was done, then the vision.
+// The opening, about 23 seconds: a chronological tour of what was done, then the vision.
 //   0–3 s    上任那天 at night: the real city lights up from City Hall; the 大巨蛋 site still has its cranes
 //   3–6 s    the city transforms: a wave from City Hall turns it into the game city, night → day, while a
 //            dolly zoom flattens the perspective into a near-isometric game camera, coming down on the 大巨蛋 site
@@ -6,11 +6,11 @@
 //   8–10 s   2024.02 west along the main streets as YouBike riders appear
 //   10–13 s  2025.09 south to 公館圓環: demolition, then the new crossing
 //   13–17 s  2026 大安路 under works, lunch bowls over the schools, AI Labs; holding on 今天
-//   17–22 s  2027 → 2030+ CiviClaw over City Hall, then north to 松山 as the AI park blueprint rises
+//   17–23 s  2027 → 2030+ CiviClaw over City Hall, then north to 松山 as 台北中央公園 and the AI district rise
 import * as THREE from "three";
 import { U, DATES, smooth, easeInOut } from "./shared.js";
 
-export const DURATION = 22.5;
+export const DURATION = 23.5;
 export const TRANSFORM = [3.0, 6.0]; // seconds over which the style goes real → game
 export const GAME_FOV_RATIO = 0.6; // game camera FOV relative to the cinematic one (dolly zoom)
 
@@ -26,7 +26,7 @@ const KEYS = [
   [15.4, [-12, 8, 21], [-3.9, 0.3, 15.5]], // 大安路 side on, under works, as the campuses round it get their lunch bowls
   [17.4, [2, 18, 38], [8, 0.5, 19]], // 今天: 大安路, the dome and City Hall's plaza in one view
   [19.2, [8, 14, 33], [13.8, 0.5, 19]], // City Hall's AI halo lights up
-  [21.0, [-14, 14, 6], [-2, 1, -12]], // 松山 as the AI park blueprint rises
+  [21.2, [-14, 14, 6], [-2, 1, -12]], // 松山: the airport makes way for the park and the AI district
   [DURATION, [-16, 15, 8], [-2, 1, -13]],
 ];
 const posCurve = new THREE.CatmullRomCurve3(KEYS.map((k) => new THREE.Vector3(...k[1])), false, "centripetal");
@@ -56,7 +56,8 @@ const DATE_KEYS = [
   [15.6, 2026.75], // lunch (2026.08.31) at about 15.4 s; AI Labs and 大安路 works on the way
   [17.6, DATES.today],
   [19.2, 2028.0], // CiviClaw (end of 2027) at about 19.1 s
-  [21.0, DATES.vision],
+  [20.0, 2031.8],
+  [22.0, DATES.vision], // the 松山 AI park rises as the camera arrives (2032.0–2032.9 at about 20.3–21.8 s)
 ];
 export function openingDate(t) {
   for (let i = 0; i < DATE_KEYS.length - 1; i++) {

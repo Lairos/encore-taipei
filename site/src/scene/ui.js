@@ -234,6 +234,7 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
       fill.style.setProperty("--split", `${Math.min(100, (1 / Math.max(s, 0.001)) * 100)}%`);
       thumb.setAttribute("aria-valuenow", s.toFixed(2));
       $("#readout-stage").textContent = stopLabel(d);
+      $("#future-note").hidden = d <= DATES.today + 0.02;
       $("#readout-date").textContent = formatDate(d);
       $("#curtain-right-title").textContent = stopLabel(d);
       $("#curtain-right-date").textContent = formatDate(d);
