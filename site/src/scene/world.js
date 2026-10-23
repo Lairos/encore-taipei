@@ -9,6 +9,7 @@ import { LAYER_BUILDERS, buildAnchors, setLayerStyle } from "./layers.js";
 import { buildSky, applyNight } from "./sky.js";
 import { buildGameTerrain, buildGameWater, buildGameCity, buildTrees, buildStreets, buildTraffic, buildCloudShadows } from "./game.js";
 import { buildRealGeometry, buildRealNight, buildRealGame } from "./realbuildings.js";
+import { buildIcons } from "./icons.js";
 import { POLICIES } from "./policies.js";
 
 const WAVE_MAX = 260; // radius that covers the whole slab from City Hall
@@ -21,6 +22,8 @@ export async function createWorld(scene, { quality }) {
   scene.add(water.mesh);
   const anchors = buildAnchors(T);
   scene.add(anchors.group);
+  const icons = buildIcons(T);
+  scene.add(icons.group);
 
   const layers = new Map();
   for (const p of POLICIES) {
@@ -106,6 +109,7 @@ export async function createWorld(scene, { quality }) {
       l.update(d, flash && t !== undefined ? Math.exp(-(now - t) * 1.6) : 0);
     }
     anchors.update(d);
+    icons.update();
   }
 
   // 我的臺北: the chosen district drawn as a bright ribbon on top of everything

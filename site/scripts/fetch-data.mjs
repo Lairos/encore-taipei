@@ -70,8 +70,10 @@ for (const [name, lat, lon, r] of [
   ["gongguan", 25.0136, 121.5345, 600],
   ["beishike", 25.1005, 121.5115, 1000],
   ["airport", 25.0669, 121.552, 1400],
+  ["zhongzheng", 25.039, 121.517, 1000],
+  ["yuanshan", 25.0765, 121.526, 600],
 ])
-  await overpass(`(way["building"](around:${r},${lat},${lon});relation["building"](around:${r},${lat},${lon}););out geom tags;`, `buildings-${name}.json`);
+  await overpass(`(way["building"](around:${r},${lat},${lon});relation["building"](around:${r},${lat},${lon}););out geom;`, `buildings-${name}.json`);
 // 東環段 station anchors: named roads and parks that the MRT bureau uses to describe each station
 await overpass(
   `(way["highway"]["name"~"^(樂群二路|敬業四路|瑞光路|陽光街321巷|舊宗路一段|舊宗路二段|民權東路六段|新湖一路|松山路|松隆路|忠孝東路五段|松仁路|信義路五段|吳興街|新光路二段|南港路一段|成美橋)$"](25.0,121.53,25.09,121.6);way["leisure"="park"]["name"~"洲子二號|大港墘|瑞光公園"](25.06,121.56,25.09,121.6);nwr["railway"="station"]["name"~"^(劍南路|動物園|松山|永春|象山)$"](24.99,121.53,25.09,121.6););out geom tags;`,
@@ -79,6 +81,8 @@ await overpass(
 );
 // landmark outlines: NVIDIA Constellation site (T17/T18), 金仁寶 T16, 臺北大巨蛋, 市政府, 國父紀念館, 臺北101
 await overpass(`way(id:1309916527,1309916528,442195153,142113976,189788192,1159328965);out geom tags;`, "landmark-ways.json");
+// iconic buildings drawn with their own roofs: 中正紀念堂, 國家音樂廳, 國家戲劇院, 臺北車站, 圓山大飯店, 總統府
+await overpass(`(way(id:1052759757,1052759775,1052759776,23641610,25202548);relation(id:206817););out geom;`, "icon-ways.json");
 // the 12 districts, for 我的臺北
 await overpass(`area["name"="臺北市"]["admin_level"="4"]->.a;rel(area.a)["boundary"="administrative"]["admin_level"="7"];out geom;`, "districts.json");
 // 都更: self-initiated renewal-unit cases (都更處 GIS API) and Taipei land-section boundaries (地政局)

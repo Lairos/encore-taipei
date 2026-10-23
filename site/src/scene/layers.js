@@ -473,7 +473,25 @@ function buildNvidia(T, p) {
 // ---------- 都市更新: one scaffold per renewal unit approved since 上任那天 (都更處 open data, placed in its land section) ----------
 function buildRenewal(T, p) {
   const rnd = mulberry(353);
-  const sites = T.renewal.cases; // [x, z, approved (decimal year), sqrt(area ha), approved flag, case ID]
+  // [x, z, approved (decimal year), sqrt(area ha), approved flag, case ID]; cases are placed within their land section,
+  // so nudge any that land on a landmark (they are certainly not that building) just outside it
+  const blocked = [...T.landmarks.icons.map((i) => ring2(i.outline)), ring2(T.landmarks.dome.outline), ring2(T.landmarks.nvidia.site)];
+  const inPoly = (x, z, r) => {
+    let c = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+    return c;
+  };
+  const sites = T.renewal.cases.map((c) => {
+    let [x, z] = c;
+    for (const r of blocked)
+      if (inPoly(x, z, r)) {
+        const [cx, cz] = centroidOf(r);
+        const d = Math.hypot(x - cx, z - cz) || 1;
+        for (let k = 0; k < 40 && inPoly(x, z, r); k++) (x += ((x - cx) / d) * 0.1), (z += ((z - cz) / d) * 0.1);
+        (x += ((x - cx) / d) * 0.3), (z += ((z - cz) / d) * 0.3);
+      }
+    return [x, z, ...c.slice(2)];
+  });
   const n = sites.length;
   const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
   const ev = new Float32Array(n),
@@ -555,16 +573,19 @@ function buildSongshan(T, p) {
   const g = new THREE.Group();
   const yAt = (x, z) => T.groundY(x, z) + 0.03;
   // airport as it is: aprons + runway with edge lights
-  const apronMat = new THREE.MeshStandardMaterial({ color: 0x55565c, roughness: 0.95 });
+  const apronMat = new THREE.MeshStandardMaterial({ color: 0x8d9095, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const airport = new THREE.Group();
   for (const a of ap.aprons) {
+    // shape drawn in (x, -z) so that turning it flat keeps the normal pointing up
     const pts = [];
-    for (let i = 0; i < a.length; i += 2) pts.push(new THREE.Vector2(a[i], a[i + 1]));
-    const sg = new THREE.ShapeGeometry(new THREE.Shape(pts));
+    for (let i = 0; i < a.length; i += 2) pts.push(new THREE.Vector2(a[i], -a[i + 1]));
+    const sg = new THREE.ShapeGeometry(new THREE.Shape(pts)).rotateX(-Math.PI / 2);
     const pos = sg.attributes.position;
-    for (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i), yAt(pos.getX(i), pos.getY(i)), pos.getY(i));
+    for (let i = 0; i < pos.count; i++) pos.setY(i, yAt(pos.getX(i), pos.getZ(i)) + 0.02);
     sg.computeVertexNormals();
-    airport.add(new THREE.Mesh(sg, apronMat).translateY(0.0));
+    const apron = new THREE.Mesh(sg, apronMat);
+    apron.receiveShadow = true;
+    airport.add(apron);
   }
   const r = ap.runway;
   const a0 = new THREE.Vector2(r[0], r[1]),
@@ -574,9 +595,67 @@ function buildSongshan(T, p) {
   dir.normalize();
   const ang = Math.atan2(dir.y, dir.x);
   const mid = a0.clone().add(a1).multiplyScalar(0.5);
-  const runway = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.6).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2c2d31, roughness: 0.9 }));
+  // parked airliners (≈45 m) along each apron's long axis
+  const body = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.5 }),
+    tail = new THREE.MeshStandardMaterial({ color: 0x2e6be6, roughness: 0.5 });
+  const plane = () => {
+    const p = new THREE.Group();
+    p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 10).rotateZ(Math.PI / 2), body));
+    p.add(new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8).scale(1.6, 1, 1).translate(0.21, 0, 0), body));
+    p.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.008, 0.4).translate(0.02, -0.01, 0), body));
+    p.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.006, 0.15).translate(-0.18, 0.01, 0), body));
+    p.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.008).translate(-0.19, 0.05, 0), tail));
+    p.traverse((o) => o.isMesh && (o.castShadow = true));
+    return p;
+  };
+  for (const a of ap.aprons) {
+    const pts = [];
+    for (let i = 0; i < a.length; i += 2) pts.push([a[i], a[i + 1]]);
+    const cx = pts.reduce((s, q) => s + q[0], 0) / pts.length,
+      cz = pts.reduce((s, q) => s + q[1], 0) / pts.length;
+    let far = pts[0];
+    for (const q of pts) if (Math.hypot(q[0] - cx, q[1] - cz) > Math.hypot(far[0] - cx, far[1] - cz)) far = q;
+    const ax = Math.atan2(far[1] - cz, far[0] - cx);
+    const span = Math.min(2.4, Math.hypot(far[0] - cx, far[1] - cz) * 1.2);
+    const count = Math.max(1, Math.min(4, Math.round(span / 0.6)));
+    for (let k = 0; k < count; k++) {
+      const t = (k - (count - 1) / 2) * 0.6;
+      const px = cx + Math.cos(ax) * t,
+        pz = cz + Math.sin(ax) * t;
+      const pl = plane();
+      pl.position.set(px, yAt(px, pz) + 0.05, pz);
+      pl.rotation.y = -ax + Math.PI / 2; // noses facing across the apron, towards the terminal
+      airport.add(pl);
+    }
+  }
+  // runway with its markings (edge lines, dashed centreline, threshold bars, numbers area), draped over the ground
+  const rc = document.createElement("canvas");
+  rc.width = 2048;
+  rc.height = 64;
+  const rg = rc.getContext("2d");
+  rg.fillStyle = "#3a3c41";
+  rg.fillRect(0, 0, 2048, 64);
+  rg.fillStyle = "#f2f2ee";
+  rg.fillRect(0, 3, 2048, 2);
+  rg.fillRect(0, 59, 2048, 2);
+  for (let x = 120; x < 1928; x += 48) rg.fillRect(x, 31, 26, 2);
+  for (const x0 of [12, 2036 - 70]) for (let y = 9; y < 56; y += 6) rg.fillRect(x0, y, 70, 3);
+  const rtex = new THREE.CanvasTexture(rc);
+  rtex.colorSpace = THREE.SRGBColorSpace;
+  rtex.anisotropy = 8;
+  const rgeo = new THREE.PlaneGeometry(len, 0.6, 64, 1).rotateX(-Math.PI / 2);
+  const runway = new THREE.Mesh(rgeo, new THREE.MeshStandardMaterial({ map: rtex, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
   runway.rotation.y = -ang;
-  runway.position.set(mid.x, yAt(mid.x, mid.y) + 0.01, mid.y);
+  runway.position.set(mid.x, 0, mid.y);
+  runway.updateMatrixWorld();
+  const rp = rgeo.attributes.position,
+    wv = new THREE.Vector3();
+  for (let i = 0; i < rp.count; i++) {
+    wv.set(rp.getX(i), 0, rp.getZ(i)).applyMatrix4(runway.matrixWorld);
+    rp.setY(i, yAt(wv.x, wv.z) + 0.03);
+  }
+  rgeo.computeVertexNormals();
+  runway.receiveShadow = true;
   airport.add(runway);
   const lightPos = [];
   for (let s = 0; s <= len; s += 0.6)

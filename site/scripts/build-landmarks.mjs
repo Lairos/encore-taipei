@@ -13,9 +13,25 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const M = 0.016 * 0.8; // metres → world units for buildings (same exaggeration as the procedural city)
 
 // zones (lat, lon, radius m): procedural blocks are not placed inside these, real footprints are
-const ZONES = { xinyi: [25.0385, 121.5615, 1300], gongguan: [25.0136, 121.5345, 600], beishike: [25.1005, 121.5115, 1000], airport: [25.0669, 121.552, 1400] };
+const ZONES = {
+  xinyi: [25.0385, 121.5615, 1300],
+  gongguan: [25.0136, 121.5345, 600],
+  beishike: [25.1005, 121.5115, 1000],
+  airport: [25.0669, 121.552, 1400],
+  zhongzheng: [25.039, 121.517, 1000],
+  yuanshan: [25.0765, 121.526, 600],
+};
 // drawn by their own models, so not extruded
-const SPECIAL = new Set([442195153, 1159328965, 1309916528]);
+// iconic buildings with their own roofs (heights in metres; roof: "octagon" | "palace" | "hip" | "tower")
+const ICONS = {
+  1052759757: { name: "中正紀念堂", wall: 30, roof: 40, kind: "octagon", wallC: "#f4f2ec", roofC: "#2f5fb3" },
+  1052759775: { name: "國家音樂廳", wall: 22, roof: 14, kind: "palace", wallC: "#b8402f", roofC: "#e2a62a" },
+  1052759776: { name: "國家戲劇院", wall: 22, roof: 14, kind: "palace", wallC: "#b8402f", roofC: "#e2a62a" },
+  23641610: { name: "臺北車站", wall: 24, roof: 10, kind: "hip", wallC: "#e6dccb", roofC: "#6e5a4c" },
+  25202548: { name: "圓山大飯店", wall: 60, roof: 24, kind: "palace", wallC: "#c0392b", roofC: "#e0952b" }, // 主樓 (14F, ~87 m)
+  206817: { name: "總統府", wall: 24, roof: 0, kind: "tower", wallC: "#b65a3f", roofC: "#8e3d2c", tower: 60 },
+};
+const SPECIAL = new Set([442195153, 1159328965, 1309916528, ...Object.keys(ICONS).map(Number)]);
 
 const local = (geom) => geom.map((g) => project(g.lat, g.lon));
 const area = (r) => r.reduce((s, p, i) => s + (r[(i + 1) % r.length][0] - p[0]) * (r[(i + 1) % r.length][1] + p[1]), 0) / 2;
@@ -180,7 +196,21 @@ const PACKAGES = [
   { id: "CF763", from: "Y39", to: "Y1", start: "2024-12-24" },
 ];
 
+// ---------- iconic buildings ----------
+const icons = [];
+for (const e of (await json("icon-ways.json")).elements) {
+  const spec = ICONS[e.id];
+  if (!spec) continue;
+  let ring;
+  if (e.type === "way") ring = local(e.geometry);
+  else ring = local(e.members.filter((m) => m.role === "outer" && m.geometry).sort((a, b) => b.geometry.length - a.geometry.length)[0].geometry);
+  if (ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]) ring.pop();
+  ring = simplify(ring.concat([ring[0]]), 0.02).slice(0, -1);
+  icons.push({ ...spec, wall: r2(spec.wall * M), roof: r2(spec.roof * M), tower: spec.tower ? r2(spec.tower * M) : 0, outline: flat(ring) });
+}
+
 const lm = {
+  icons,
   zones: Object.values(ZONES).map(([lat, lon, r]) => [...project(lat, lon).map(r2), r2((r - 60) / 100)]),
   buildings,
   dome: { ...ellipse(ways.get(442195153)), outline: flat(ways.get(442195153)) },
@@ -189,5 +219,6 @@ const lm = {
   eastring: { stations: S, via: Object.fromEntries(Object.entries(via).map(([k, v]) => [k, v && v.map(r2)])), packages: PACKAGES },
 };
 await writeFile(out, JSON.stringify(lm));
+console.log(`icons: ${icons.map((i) => `${i.name}(${i.outline.length / 2})`).join(" ")}`);
 console.log(`landmarks: ${buildings.length} buildings, dome ${lm.dome.a}×${lm.dome.b} @${lm.dome.angle}, stations ${S.map((s) => s.id).join(" ")}`);
 for (const s of S) console.log(`  ${s.id} ${s.name} ${s.x},${s.z}`);

@@ -50,6 +50,8 @@ npm run data
 
 依序下載地形、OpenStreetMap、YouBike、都更處案件、地段圖與行政區界，並產生 `public/data/` 與 `src/data/districts.json`。原始檔放在 `data-raw/`（不進版本控管）。
 
+`public/data/landmarks.json` 收錄六個區域（信義、中正、公館、圓山、北士科、松山機場）的 OpenStreetMap 真實建物輪廓與高度、地標外框（大巨蛋、101、輝達基地）、特色建築（中正紀念堂、總統府、臺北車站、國家戲劇院／音樂廳、圓山大飯店）與東環段站位；設定在 `scripts/build-landmarks.mjs`。
+
 ## 網址參數（QA 用）
 
 | 參數 | 作用 |
