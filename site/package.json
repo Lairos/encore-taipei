@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "data": "node scripts/fetch-data.mjs && node scripts/build-data.mjs && node scripts/build-renewal.mjs && node scripts/build-districts.mjs",
+    "data": "node scripts/fetch-data.mjs && node scripts/build-data.mjs && node scripts/build-renewal.mjs && node scripts/build-districts.mjs && node scripts/build-landmarks.mjs",
     "deploy": "astro build && wrangler pages deploy dist --project-name taipei-encore --branch main"
   },
   "dependencies": {

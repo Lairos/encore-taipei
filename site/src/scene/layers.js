@@ -111,9 +111,20 @@ function groundRing(r, color) {
 }
 
 // ---------- 臺北 101 & 市政府: fixed anchors so the city is recognisable at a glance ----------
+// metres → world units for buildings, matching the city blocks and OpenStreetMap extrusions
+const BM = 0.016 * 0.8;
+const ring2 = (flat) => {
+  const r = [];
+  for (let i = 0; i < flat.length; i += 2) r.push([flat[i], flat[i + 1]]);
+  return r;
+};
+const centroidOf = (r) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length];
+
+// ---------- 臺北101: real proportions (508 m) at its OpenStreetMap position ----------
+// base section to 100 m tapering in, eight 8-storey "bamboo" modules flaring out, crown sections, spire
 function buildAnchors(T) {
   const g = new THREE.Group();
-  const [x, z] = project(25.03395, 121.5645);
+  const [x, z] = T.landmarks.t101.center;
   const y = T.groundY(x, z);
   const c = document.createElement("canvas");
   c.width = 8;
@@ -128,57 +139,59 @@ function buildAnchors(T) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.MeshStandardMaterial({ color: 0x5f8f8a, roughness: 0.25, metalness: 0.5, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0 });
-  const parts = [box(1.0, 0.55, 0.9, 0, 0, 0)];
-  parts.push(new THREE.CylinderGeometry(0.28, 0.36, 2.0, 4, 1).rotateY(Math.PI / 4).translate(0, 0.55 + 1.0, 0));
-  for (let k = 0; k < 8; k++) parts.push(new THREE.CylinderGeometry(0.34, 0.25, 0.62, 4, 1).rotateY(Math.PI / 4).translate(0, 2.55 + k * 0.62 + 0.31, 0));
-  parts.push(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 4).rotateY(Math.PI / 4).translate(0, 7.51 + 0.25, 0));
-  parts.push(new THREE.CylinderGeometry(0.02, 0.05, 1.0, 6).translate(0, 8.0 + 0.5, 0));
-  for (const p of parts) {
-    const m = new THREE.Mesh(p, mat);
+  // square section, corners chamfered by rotating a 4-sided cylinder 45°
+  const sq = (rTop, rBottom, h, y0) => new THREE.CylinderGeometry(rTop, rBottom, h, 4, 1).rotateY(Math.PI / 4).translate(0, y0 + h / 2, 0);
+  const parts = [sq(0.4, 0.46, 100 * BM, 0)];
+  for (let k = 0; k < 8; k++) parts.push(sq(0.42, 0.33, 34 * BM, (100 + k * 34) * BM));
+  parts.push(sq(0.27, 0.3, 30 * BM, 372 * BM), sq(0.2, 0.24, 26 * BM, 402 * BM), sq(0.14, 0.17, 21 * BM, 428 * BM));
+  parts.push(new THREE.CylinderGeometry(0.015, 0.05, 59 * BM, 6).translate(0, 449 * BM + (59 * BM) / 2, 0));
+  for (const geo of parts) {
+    const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
+    m.castShadow = m.receiveShadow = true;
     g.add(m);
   }
-  g.traverse((o) => o.isMesh && (o.castShadow = o.receiveShadow = true));
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 0.6, 0.4) }));
-  tip.position.set(x, y + 9.0, z);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 0.6, 0.4) }));
+  tip.position.set(x, y + 508 * BM, z);
   g.add(tip);
-
-  // City Hall: low cross-shaped block east of 101
-  const [hx, hz] = project(25.03752, 121.56447);
-  const hy = T.groundY(hx, hz);
-  const hallMat = new THREE.MeshStandardMaterial({ color: 0xb9b2a5, roughness: 0.8, emissive: 0xffc98a, emissiveIntensity: 0 });
-  for (const geo of [box(1.6, 0.42, 0.5, 0, 0, 0), box(0.5, 0.42, 1.4, 0, 0, 0), box(0.42, 0.62, 0.42, 0, 0, 0)]) {
-    const m = new THREE.Mesh(geo, hallMat);
-    m.position.set(hx, hy, hz);
-    g.add(m);
-  }
+  // 臺北市政府 now comes from its real footprint (OpenStreetMap), extruded with the other buildings
   return {
     group: g,
-    exclusions: [
-      { x, z, r: 1.0 },
-      { x: hx, z: hz, r: 1.1 },
-    ],
+    exclusions: [{ x, z, r: 0.6 }],
     update() {
       mat.emissiveIntensity = 0.4 + 2.2 * U.uNight.value;
-      hallMat.emissiveIntensity = 0.25 * U.uNight.value;
     },
   };
 }
 
-// ---------- 臺北大巨蛋: dark and fenced → lit and in use ----------
+// ---------- 臺北大巨蛋: the dome fitted to its real footprint (64 m above ground), dark and fenced → lit and in use ----------
 function buildDome(T, p) {
-  const [x, z] = project(...p.place);
+  const { center, a, b, angle } = T.landmarks.dome;
+  const [x, z] = center;
   const y = T.groundY(x, z);
   const g = new THREE.Group();
   g.position.set(x, y, z);
+  g.rotation.y = -angle;
+  const H = 64 * BM,
+    WALL = 22 * BM;
   const shell = new THREE.MeshStandardMaterial({ color: 0xcfd5dd, roughness: 0.35, metalness: 0.2, emissive: 0xffe2b8, emissiveIntensity: 0 });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 20, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.55, 0.62, 1.38).translate(0, 0.32, 0), shell);
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.04, 0.34, 64, 1, true).scale(1.56, 1, 1.39).translate(0, 0.17, 0), shell);
-  const plaza = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 0.03, 64).scale(1, 1, 0.9), new THREE.MeshStandardMaterial({ color: 0x8d8a82, roughness: 1 }));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 18, 0, Math.PI * 2, 0, Math.PI / 2).scale(a, H - WALL, b).translate(0, WALL, 0), shell);
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.02, WALL, 72, 1, true).scale(a, 1, b).translate(0, WALL / 2, 0), shell);
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2).scale(a + 0.45, 1, b + 0.4).translate(0, 0.012, 0), new THREE.MeshStandardMaterial({ color: 0x9a968d, roughness: 1 }));
+  // roof ribs: meridians and two parallels over the ellipsoid, like the real steel roof
+  const rib = [];
+  const P = (u, v) => new THREE.Vector3(Math.cos(u) * Math.cos(v) * a * 1.003, WALL + Math.sin(v) * (H - WALL) * 1.003, Math.sin(u) * Math.cos(v) * b * 1.003);
+  for (let k = 0; k < 28; k++) {
+    const u = (k / 28) * Math.PI * 2;
+    for (let j = 0; j < 12; j++) rib.push(P(u, (j / 12) * (Math.PI / 2)), P(u, ((j + 1) / 12) * (Math.PI / 2)));
+  }
+  for (const v of [0.35, 0.8])
+    for (let k = 0; k < 72; k++) rib.push(P((k / 72) * Math.PI * 2, v), P(((k + 1) / 72) * Math.PI * 2, v));
+  const ribs = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rib), new THREE.LineBasicMaterial({ color: 0x8e98a6, transparent: true, opacity: 0.55 }));
   // roof light ring (bloom)
   const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0) });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 6, 96).rotateX(Math.PI / 2).scale(1.56, 1, 1.39).translate(0, 0.34, 0), ringMat);
-  const crown = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.02, 6, 64).rotateX(Math.PI / 2).scale(1.56, 1, 1.39).translate(0, 0.9, 0), ringMat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 6, 96).rotateX(Math.PI / 2).scale(a, 1, b).translate(0, WALL + 0.01, 0), ringMat);
+  const crown = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.02, 6, 64).rotateX(Math.PI / 2).scale(a, 1, b).translate(0, WALL + (H - WALL) * 0.91, 0), ringMat);
   // construction fence (before)
   const fenceMat = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
@@ -186,7 +199,7 @@ function buildDome(T, p) {
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `uniform float uNight; varying vec2 vUv; void main(){ float s = step(0.5, fract(vUv.x * 60.0)); vec3 c = mix(vec3(0.85,0.85,0.8), vec3(0.95,0.45,0.15), s) * mix(0.6, 0.18, uNight); gl_FragColor = vec4(c, 1.0); }`,
   });
-  const fence = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.16, 96, 1, true).scale(1, 1, 0.88).translate(0, 0.08, 0), fenceMat);
+  const fence = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.14, 96, 1, true).scale(a + 0.35, 1, b + 0.3).translate(0, 0.07, 0), fenceMat);
   // light beams (after)
   const beamMat = new THREE.ShaderMaterial({
     transparent: true,
@@ -199,19 +212,19 @@ function buildDome(T, p) {
   });
   const beams = new THREE.Group();
   for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const b = new THREE.Mesh(new THREE.ConeGeometry(0.22, 5, 16, 1, true).translate(0, -2.5, 0).rotateX(Math.PI), beamMat);
-    b.position.set(Math.cos(a) * 1.7, 0.1, Math.sin(a) * 1.5);
-    b.rotation.z = Math.cos(a) * 0.18;
-    b.rotation.x = -Math.sin(a) * 0.18;
-    beams.add(b);
+    const t = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    const bm = new THREE.Mesh(new THREE.ConeGeometry(0.22, 5, 16, 1, true).translate(0, -2.5, 0).rotateX(Math.PI), beamMat);
+    bm.position.set(Math.cos(t) * (a + 0.2), 0.1, Math.sin(t) * (b + 0.2));
+    bm.rotation.z = Math.cos(t) * 0.18;
+    bm.rotation.x = -Math.sin(t) * 0.18;
+    beams.add(bm);
   }
-  g.add(plaza, wall, dome, ring, crown, fence, beams);
+  g.add(plaza, wall, dome, ribs, ring, crown, fence, beams);
   for (const o of [plaza, wall, dome]) o.castShadow = o.receiveShadow = true;
   return {
     group: g,
-    anchor: new THREE.Vector3(x, y + 1.6, z),
-    exclusions: [{ x, z, r: 2.4 }],
+    anchor: new THREE.Vector3(x, y + H + 0.6, z),
+    exclusions: [{ x, z, r: a + 0.5 }],
     update(d, flash) {
       const on = smooth(p.event - 0.02, p.event + 0.02, d);
       fence.visible = on < 0.5;
@@ -293,116 +306,159 @@ function buildGongguan(T, p) {
   };
 }
 
-// ---------- 捷運環狀線東環段 (route drawn for illustration) ----------
-const EAST_RING = [
-  [24.9829, 121.5414], // 大坪林
-  [24.9905, 121.5585],
-  [24.9983, 121.5794], // 動物園
-  [25.0175, 121.5935],
-  [25.038, 121.6075],
-  [25.0553, 121.6176], // 南港展覽館
-  [25.0672, 121.6116], // 東湖
-  [25.0837, 121.5944], // 內湖
-  [25.0848, 121.5556], // 劍南路
-  [25.0935, 121.5262], // 士林
-];
+// ---------- 捷運環狀線東環段: 10 stations where 捷運局 sites them, each works package lit from its start date ----------
+const yearOf = (iso) => {
+  const d = new Date(iso + "T00:00:00Z"),
+    y = d.getUTCFullYear();
+  return y + (d - Date.UTC(y, 0, 1)) / (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1));
+};
 function buildEastRing(T, p) {
-  const flat = new THREE.CatmullRomCurve3(
-    EAST_RING.map(([la, lo]) => {
-      const [x, z] = project(la, lo);
-      return new THREE.Vector3(x, 0, z);
-    }),
-  );
-  const pts = flat.getSpacedPoints(400).map((v) => new THREE.Vector3(v.x, T.groundY(v.x, v.z) + 0.45, v.z));
-  for (let pass = 0; pass < 6; pass++) for (let i = 1; i < pts.length - 1; i++) pts[i].y = Math.max(pts[i].y, (pts[i - 1].y + pts[i + 1].y) / 2); // smooth over hills
+  const { stations, via, packages } = T.landmarks.eastring;
+  const byId = Object.fromEntries(stations.map((s) => [s.id, s]));
+  // the bureau's route: Y29 … Y35, over 成美橋 to 松山 (Y36), 永春, 象山, 吳興街, then under 拇指山 past the 萬芳 shaft to 動物園
+  const order = ["Y29", "Y30", "Y31", "Y32", "Y33", "Y34", "Y35", "chengmei", "Y36", "Y37", "Y38", "Y39", "wanfangShaft", "zooShaft", "Y1"];
+  const ctrl = order.map((k) => (byId[k] ? [byId[k].x, byId[k].z] : via[k])).filter(Boolean);
+  const flat = new THREE.CatmullRomCurve3(ctrl.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, "centripetal");
+  const N = 600;
+  const pts = flat.getSpacedPoints(N).map((v) => new THREE.Vector3(v.x, T.groundY(v.x, v.z) + 0.3, v.z));
+  for (let pass = 0; pass < 6; pass++) for (let i = 1; i < pts.length - 1; i++) pts[i].y = Math.max(pts[i].y, (pts[i - 1].y + pts[i + 1].y) / 2); // smooth over 拇指山
   const curve = new THREE.CatmullRomCurve3(pts);
-  const SPLIT = 0.42; // first works package (south) vs second
+  // where each station falls along the curve (0..1)
+  const along = (x, z) => {
+    let best = 0,
+      bd = Infinity;
+    pts.forEach((q, i) => {
+      const d = (q.x - x) ** 2 + (q.z - z) ** 2;
+      if (d < bd) (bd = d), (best = i / N);
+    });
+    return best;
+  };
+  const tOf = Object.fromEntries(stations.map((s) => [s.id, along(s.x, s.z)]));
+  const segs = packages.map((k) => ({ ...k, t0: tOf[k.from], t1: tOf[k.to], date: k.start ? yearOf(k.start) : 9999 }));
+  const geo = new THREE.TubeGeometry(curve, 900, 0.09, 6, false);
+  // per-vertex start date of the works package it belongs to (9999 = still tendering)
+  const uvs = geo.attributes.uv;
+  const start = new Float32Array(uvs.count);
+  for (let i = 0; i < uvs.count; i++) {
+    const t = uvs.getX(i);
+    start[i] = (segs.find((s) => t >= Math.min(s.t0, s.t1) - 1e-3 && t <= Math.max(s.t0, s.t1) + 1e-3) || { date: 9999 }).date;
+  }
+  geo.setAttribute("aStart", new THREE.BufferAttribute(start, 1));
   const mat = glow(new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uA: { value: 0 }, uB: { value: 0 }, uFlash: { value: 0 }, uTime: U.uTime, uNight: U.uNight, uGame: U.uGame },
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    uniforms: { uDate: U.uDate, uFlash: { value: 0 }, uTime: U.uTime, uNight: U.uNight, uGame: U.uGame },
+    vertexShader: `attribute float aStart; varying vec2 vUv; varying float vStart; void main(){ vUv = uv; vStart = aStart; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */ `
-      uniform float uA; uniform float uB; uniform float uFlash; uniform float uTime; uniform float uNight; uniform float uGame; varying vec2 vUv;
+      uniform float uDate; uniform float uFlash; uniform float uTime; uniform float uNight; uniform float uGame; varying vec2 vUv; varying float vStart;
       void main() {
         float t = vUv.x;
-        float on = t < ${SPLIT} ? uA : uB;
-        float dash = step(0.5, fract(t * 140.0));
+        float on = smoothstep(vStart - 0.01, vStart + 0.03, uDate);
+        float dash = step(0.5, fract(t * 220.0));
         vec3 planned = vec3(0.8, 0.85, 0.95) * dash * 0.16;
-        float pulse = smoothstep(0.9, 1.0, fract(t * 18.0 - uTime * 0.5));
+        float pulse = smoothstep(0.9, 1.0, fract(t * 28.0 - uTime * 0.5));
         vec3 build = vec3(1.0, 0.54, 0.24) * (0.9 + pulse * 2.2);
         vec3 col = mix(planned, build, on) * (0.6 + 0.4 * uNight) + vec3(1.0, 0.7, 0.4) * uFlash * on;
         gl_FragColor = vec4(col, 1.0);
-        if (uGame > 0.5) gl_FragColor = vec4(mix(vec3(0.97), mix(vec3(0.92, 0.38, 0.06), vec3(0.98), step(0.5, fract(t * 260.0))), on), mix(dash * 0.85, 1.0, on));
+        if (uGame > 0.5) gl_FragColor = vec4(mix(vec3(0.97), mix(vec3(0.92, 0.38, 0.06), vec3(0.98), step(0.5, fract(t * 400.0))), on), mix(dash * 0.85, 1.0, on));
       }`,
   }));
-  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 600, 0.09, 6, false), mat);
-  // tower cranes along each works package (illustrative)
-  const cranes = [];
-  for (const [t, which] of [
-    [0.12, "A"],
-    [0.3, "A"],
-    [0.6, "B"],
-    [0.8, "B"],
-  ]) {
-    const v = curve.getPointAt(t);
-    const c = makeCrane();
-    c.position.set(v.x + 0.3, T.groundY(v.x, v.z), v.z + 0.3);
-    Object.assign(c.userData, { which, phase: t * 10 });
-    cranes.push(c);
-  }
+  const tube = new THREE.Mesh(geo, mat);
+  // stations: small white discs, plus a crane at every station / shaft of a started package
+  const stationMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0xffffff, emissiveIntensity: 0.15 });
   const g = new THREE.Group();
-  g.add(tube, ...cranes);
-  const mid = curve.getPointAt(0.5);
+  g.add(tube);
+  for (const s of stations.filter((s) => !["Y29", "Y1"].includes(s.id))) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 20), stationMat);
+    m.position.set(s.x, T.groundY(s.x, s.z) + 0.04, s.z);
+    g.add(m);
+  }
+  const cranes = [];
+  const sites = [];
+  for (const k of segs.filter((k) => k.start)) {
+    const ids = stations.filter((s) => tOf[s.id] >= Math.min(k.t0, k.t1) && tOf[s.id] <= Math.max(k.t0, k.t1) && !["Y29", "Y1", k.from === "Y37" ? "Y37" : "", k.to === "Y35" ? "Y35" : ""].includes(s.id));
+    for (const s of ids) sites.push([s.x, s.z, k.date]);
+    if (k.id === "CF763") sites.push([...via.wanfangShaft, k.date], [...via.zooShaft, k.date]);
+  }
+  for (const [sx, sz, date] of sites) {
+    const c = makeCrane(1.8);
+    c.position.set(sx + 0.25, T.groundY(sx, sz), sz + 0.2);
+    Object.assign(c.userData, { date, phase: sx });
+    cranes.push(c);
+    g.add(c);
+  }
+  const mid = byId.Y35;
   return {
     group: g,
-    anchor: new THREE.Vector3(mid.x, mid.y + 1.3, mid.z),
+    anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.4, mid.z),
     exclusions: [],
     update(d, flash) {
-      mat.uniforms.uA.value = smooth(p.event - 0.01, p.event + 0.03, d);
-      mat.uniforms.uB.value = smooth(p.event2 - 0.01, p.event2 + 0.03, d);
       mat.uniforms.uFlash.value = flash;
       for (const c of cranes) {
-        c.visible = d >= (c.userData.which === "A" ? p.event : p.event2);
+        c.visible = d >= c.userData.date;
         c.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.25 + c.userData.phase) * 1.2;
       }
     },
   };
 }
 
-// ---------- 輝達北士科總部: empty lot → signed (gold ring) → blueprint HQ ----------
+// ---------- 輝達北士科總部: the real T17/T18 lot → signed (gold ring, site fence, crane) → low "Constellation" blueprint ----------
+// press descriptions: modelled on the US HQ, low and wide (high site coverage), facade of triangles and polygons, lots of glass
 function buildNvidia(T, p) {
-  const [x, z] = project(...p.place);
-  const y = T.groundY(x, z) + 0.02;
+  const siteRing = ring2(T.landmarks.nvidia.site);
+  const [cx, cz] = centroidOf(siteRing);
+  const y = Math.max(...siteRing.map(([x, z]) => T.groundY(x, z))) + 0.02;
   const g = new THREE.Group();
-  g.position.set(x, y, z);
-  const lot = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.4).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6b5f4c, roughness: 1 }));
-  const hq = blueprint(
-    [box(2.4, 0.9, 1.3, -0.1, 0, 0), box(1.1, 1.6, 0.9, 0.7, 0, 0.1), new THREE.CylinderGeometry(0.45, 0.45, 1.25, 24).translate(-0.85, 0.625, 0.1)],
-    CYAN,
-    y,
-    1.6,
-  );
-  const ring = groundRing(2.3, GOLD);
-  ring.position.y = 0.02;
+  const shape = (r) => new THREE.Shape(r.map(([x, z]) => new THREE.Vector2(x, z)));
+  const lotGeo = new THREE.ShapeGeometry(shape(siteRing)).rotateX(Math.PI / 2).translate(0, y, 0);
+  const lot = new THREE.Mesh(lotGeo, new THREE.MeshStandardMaterial({ color: 0x6b5f4c, roughness: 1, side: THREE.DoubleSide }));
+  // building: the lot inset toward its centre (about 70% coverage), ~30 m, with a faceted roof rising to a raised centre
+  const inset = siteRing.map(([x, z]) => [cx + (x - cx) * 0.84, cz + (z - cz) * 0.84]);
+  const H = 30 * BM,
+    pos = [];
+  const tri = (a, b, c) => pos.push(...a, ...b, ...c);
+  const mid = inset.map(([x, z], i) => [cx + (x - cx) * 0.5, y + H + (i % 2 ? 0.1 : 0.05), cz + (z - cz) * 0.5]);
+  const top = [cx, y + H + 0.16, cz];
+  for (let i = 0; i < inset.length; i++) {
+    const j = (i + 1) % inset.length;
+    const a0 = [inset[i][0], y, inset[i][1]],
+      b0 = [inset[j][0], y, inset[j][1]],
+      a1 = [inset[i][0], y + H, inset[i][1]],
+      b1 = [inset[j][0], y + H, inset[j][1]];
+    tri(a0, b0, b1);
+    tri(a0, b1, a1); // facade
+    tri(a1, b1, mid[j]);
+    tri(a1, mid[j], mid[i]); // outer roof facets
+    tri(mid[i], mid[j], top); // inner roof facets
+  }
+  const hqGeo = new THREE.BufferGeometry();
+  hqGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  hqGeo.computeVertexNormals();
+  const hq = blueprint([hqGeo], CYAN, y, H + 0.16);
+  const ring = groundRing(Math.max(...siteRing.map(([x, z]) => Math.hypot(x - cx, z - cz))) + 0.3, GOLD);
+  ring.position.set(cx, y + 0.01, cz);
+  // site fence along the real lot edges, and a tower crane
   const site = new THREE.Group();
   const fenceMat = new THREE.MeshLambertMaterial({ color: 0xf28c28 });
-  for (const [w, d, fx, fz] of [
-    [3.4, 0.03, 0, -1.2],
-    [3.4, 0.03, 0, 1.2],
-    [0.03, 2.4, -1.7, 0],
-    [0.03, 2.4, 1.7, 0],
-  ])
-    site.add(new THREE.Mesh(box(w, 0.12, d, fx, 0, fz), fenceMat));
-  const crane = makeCrane(2.6);
-  crane.position.set(1.2, 0, -0.8);
+  for (let i = 0; i < siteRing.length; i++) {
+    const [x0, z0] = siteRing[i],
+      [x1, z1] = siteRing[(i + 1) % siteRing.length];
+    const l = Math.hypot(x1 - x0, z1 - z0);
+    if (l < 0.02) continue;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(l, 0.12, 0.03), fenceMat);
+    f.position.set((x0 + x1) / 2, y + 0.06, (z0 + z1) / 2);
+    f.rotation.y = -Math.atan2(z1 - z0, x1 - x0);
+    site.add(f);
+  }
+  const crane = makeCrane(2.4);
+  crane.position.set(inset[0][0], y, inset[0][1]);
   site.add(crane);
   g.add(lot, hq, ring, site);
   return {
     group: g,
-    anchor: new THREE.Vector3(x, y + 2.2, z),
-    exclusions: [{ rect: true, x, z, w: 1.9, d: 1.4 }],
+    anchor: new THREE.Vector3(cx, y + 2.0, cz),
+    exclusions: [{ x: cx, z: cz, r: 1.6 }],
     update(d, flash) {
       const signed = d >= p.event;
       ring.material.uniforms.uA.value = signed ? 0.6 + flash * 2.5 : 0;
@@ -642,7 +698,9 @@ function buildSongshan(T, p) {
 
 // ---------- 自駕公車示範 (planned): a small loop at 北士科 with a moving shuttle ----------
 function buildAutobus(T, p) {
-  const [x, z] = project(...p.place);
+  const site = ring2(T.landmarks.nvidia.site);
+  const [sx, sz] = centroidOf(site);
+  const [x, z] = [sx + 3.2, sz + 1.2]; // demonstration loop beside the 北士科 site (illustrative)
   const y = T.groundY(x, z) + 0.08;
   const curve = new THREE.EllipseCurve(0, 0, 2.6, 1.6, 0, Math.PI * 2);
   const pts = curve.getSpacedPoints(120).map((v) => new THREE.Vector3(x + v.x, y, z + v.y));

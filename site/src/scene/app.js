@@ -117,8 +117,8 @@ async function start() {
   const CURTAIN_VIEW = new THREE.Vector3(2, 3, 18);
   const FLY_DIST = { dome: 9, gongguan: 5, nvidia: 11, autobus: 12, songshan: 34, eastring: 46, renewal: 34, lunch: 40, youbike: 40 };
   for (const [id, l] of world.layers) if (l.anchor) ui.addPin(id, l.anchor, l.policy);
-  world.onMilestone((p, ev) => {
-    if (mode === "opening" || dateTween) ui.caption(p, ev);
+  world.onMilestone((p, ev, label) => {
+    if (mode === "opening" || dateTween) ui.caption(p, ev, label);
   });
 
   function focusPolicy(id) {

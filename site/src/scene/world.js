@@ -8,6 +8,7 @@ import { planCity, buildCity, buildRoads } from "./city.js";
 import { LAYER_BUILDERS, buildAnchors, setLayerStyle } from "./layers.js";
 import { buildSky, applyNight } from "./sky.js";
 import { buildGameTerrain, buildGameWater, buildGameCity, buildTrees, buildStreets, buildTraffic, buildCloudShadows } from "./game.js";
+import { buildRealGeometry, buildRealNight, buildRealGame } from "./realbuildings.js";
 import { POLICIES } from "./policies.js";
 
 const WAVE_MAX = 260; // radius that covers the whole slab from City Hall
@@ -29,12 +30,17 @@ export async function createWorld(scene, { quality }) {
     layers.set(p.id, { policy: p, ...l });
     scene.add(l.group);
   }
-  const exclusions = [...anchors.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions)];
+  // landmark zones carry real OpenStreetMap buildings, so no procedural blocks there
+  const zones = T.landmarks.zones.map(([x, z, r]) => ({ x, z, r }));
+  const exclusions = [...anchors.exclusions, ...[...layers.values()].flatMap((l) => l.exclusions), ...zones];
   const items = planCity(T, { quality, exclusions });
   const city = buildCity(items);
   scene.add(city.mesh);
   const realRoads = buildRoads(T);
   scene.add(realRoads);
+  const realGeo = buildRealGeometry(T);
+  const realNight = buildRealNight(realGeo);
+  scene.add(realNight);
 
   // game-style city, revealed by the wave
   const game = new THREE.Group();
@@ -43,9 +49,9 @@ export async function createWorld(scene, { quality }) {
   const streets = buildStreets(T);
   const traffic = buildTraffic(T, streets.polylines, quality);
   const clouds = buildCloudShadows(T);
-  game.add(trees.group, streets.mesh, traffic.mesh, clouds.group);
+  game.add(trees.group, streets.mesh, traffic.mesh, clouds.group, buildRealGame(realGeo));
   scene.add(game);
-  const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads];
+  const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads, realNight];
 
   const sky = buildSky();
   scene.add(sky.mesh);
@@ -84,10 +90,10 @@ export async function createWorld(scene, { quality }) {
   function tick(mainDate, time) {
     if (prev !== null && mainDate > prev)
       for (const p of POLICIES)
-        for (const ev of [p.event, p.event2])
+        for (const [ev, label] of p.milestones || [[p.event, p.name]])
           if (ev !== undefined && prev < ev && mainDate >= ev) {
             flashAt.set(p.id, time);
-            for (const fn of listeners) fn(p, ev);
+            for (const fn of listeners) fn(p, ev, label);
           }
     prev = mainDate;
   }

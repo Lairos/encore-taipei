@@ -8,7 +8,8 @@ import { surfaceY } from "./terrain.js";
 import { ROAD_WIDTH, hotness } from "./city.js";
 
 // ---------- material patch: appear inside the wave, pop up as it passes, glow on the wave front ----------
-function morphPatch(mat, { pop = false, vertex = "", fragment = "", fragDecl = "", vertDecl = "" } = {}) {
+// merged: the geometry holds many buildings in world space, each vertex carrying its building's centre (aCenter) and base (aBase)
+export function morphPatch(mat, { pop = false, merged = false, vertex = "", fragment = "", fragDecl = "", vertDecl = "" } = {}) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uMorphR = U.uMorphR;
     sh.uniforms.uMorphCenter = U.uMorphCenter;
@@ -19,12 +20,17 @@ function morphPatch(mat, { pop = false, vertex = "", fragment = "", fragDecl = "
       .replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
-        #ifdef USE_INSTANCING
+        ${
+          merged
+            ? "vec2 mOrigin = aCenter;"
+            : `#ifdef USE_INSTANCING
           vec2 mOrigin = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz;
         #else
           vec2 mOrigin = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz;
-        #endif
-        ${pop ? "float mGrow = smoothstep(uMorphR, uMorphR - 7.0, length(mOrigin - uMorphCenter)); transformed.y *= mGrow + sin(mGrow * 3.14159) * 0.28;" : ""}
+        #endif`
+        }
+        ${pop ? "float mGrow = smoothstep(uMorphR, uMorphR - 7.0, length(mOrigin - uMorphCenter)); float mK = mGrow + sin(mGrow * 3.14159) * 0.28;" : ""}
+        ${pop && merged ? "transformed.y = aBase + (transformed.y - aBase) * mK;" : pop ? "transformed.y *= mK;" : ""}
         ${vertex}`,
       )
       .replace(
@@ -48,7 +54,7 @@ function morphPatch(mat, { pop = false, vertex = "", fragment = "", fragDecl = "
       .replace("#include <color_fragment>", `#include <color_fragment>\n${fragment}`);
   };
   // every patch variant needs its own program; by default three.js keys them all on the same callback source
-  mat.customProgramCacheKey = () => `morph|${pop}|${vertDecl}|${vertex}|${fragDecl}|${fragment}`;
+  mat.customProgramCacheKey = () => `morph|${pop}|${merged}|${vertDecl}|${vertex}|${fragDecl}|${fragment}`;
   return mat;
 }
 
@@ -264,6 +270,20 @@ export function buildTrees(T, items, quality) {
   const e = T.extent;
   const step = quality === "high" ? 1.1 : 1.5;
   const occupied = new Set(items.map((b) => `${Math.round(b.x / 0.5)},${Math.round(b.z / 0.5)}`));
+  // real OpenStreetMap buildings: mark their outlines (sampled every ~0.25) and centres so trees stay off them
+  for (const b of T.landmarks.buildings) {
+    let cx = 0,
+      cz = 0;
+    const n = (b.length - 3) / 2;
+    for (let i = 3; i < b.length; i += 2) {
+      const [x0, z0, x1, z1] = [b[i], b[i + 1], b[i + 2] ?? b[3], b[i + 3] ?? b[4]];
+      const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.25);
+      for (let k = 0; k <= steps; k++) occupied.add(`${Math.round((x0 + ((x1 - x0) * k) / steps) / 0.5)},${Math.round((z0 + ((z1 - z0) * k) / steps) / 0.5)}`);
+      cx += x0 / n;
+      cz += z0 / n;
+    }
+    occupied.add(`${Math.round(cx / 0.5)},${Math.round(cz / 0.5)}`);
+  }
   const broad = [],
     conifer = [],
     street = [];

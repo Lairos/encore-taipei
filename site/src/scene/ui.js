@@ -30,11 +30,11 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
   $("#cta-explore").addEventListener("click", () => onCta("explore"));
   $("#cta-me").addEventListener("click", () => onCta("me"));
 
-  function caption(p, ev) {
+  function caption(p, ev, label = p.name) {
     const st = STAGE[p.status];
     const li = document.createElement("li");
     li.style.setProperty("--c", cssc(st));
-    li.innerHTML = `<i></i><time>${esc(formatDate(ev).slice(0, 7))}</time><span>${esc(p.name)}${ev === p.event2 ? "（第二標開工）" : ""}</span>`;
+    li.innerHTML = `<i></i><time>${esc(formatDate(ev).slice(0, 7))}</time><span>${esc(label)}</span>`;
     captions.prepend(li);
     while (captions.children.length > 3) captions.lastElementChild.remove();
     setTimeout(() => li.classList.add("out"), 2600);

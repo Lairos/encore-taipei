@@ -10,10 +10,11 @@ const CARVE = 0.12; // how far river beds sit below the surrounding ground
 export const surfaceY = (h) => (h < -1.5 ? -0.12 : Math.max(0.3, h) * VS);
 
 export async function loadTerrain() {
-  const [geo, bin, renewal] = await Promise.all([
-    fetch("data/geo.json").then((r) => r.json()),
-    fetch("data/terrain.bin").then((r) => r.arrayBuffer()),
-    fetch("data/renewal.json").then((r) => r.json()),
+  const [geo, bin, renewal, landmarks] = await Promise.all([
+    fetch("/data/geo.json").then((r) => r.json()),
+    fetch("/data/terrain.bin").then((r) => r.arrayBuffer()),
+    fetch("/data/renewal.json").then((r) => r.json()),
+    fetch("/data/landmarks.json").then((r) => r.json()),
   ]);
   const g = geo.grid;
   const heights = new Int16Array(bin, 0, g.nx * g.nz);
@@ -40,7 +41,7 @@ export async function loadTerrain() {
   const isWater = (x, z) => (maskAt(x, z) & 2) === 2;
   const extent = { minX: g.minX, minZ: g.minZ, maxX: g.minX + (g.nx - 1) * g.step, maxZ: g.minZ + (g.nz - 1) * g.step };
 
-  return { geo, renewal, elev, groundY, maskAt, inCity, isWater, extent };
+  return { geo, renewal, landmarks, elev, groundY, maskAt, inCity, isWater, extent };
 }
 
 export function buildTerrain(T) {
