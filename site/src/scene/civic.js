@@ -500,10 +500,11 @@ export function buildSidewalk(T, p) {
     const l = Math.hypot(x1 - x0, z1 - z0);
     return { x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, dx: (x1 - x0) / l, dz: (z1 - z0) / l };
   };
-  // the street is drawn here too (大安路 is not one of the main roads the game city paints); widths exaggerated ×3
-  const ROAD = 0.22,
-    NARROW = 0.05,
-    WIDE = 0.14;
+  // the street is drawn here too (大安路 is not one of the main roads the game city paints); widths exaggerated
+  // (about ×6) so the change reads at district zoom: 1.5 m of cluttered pavement → 3.5–4.2 m with trees
+  const ROAD = 0.3,
+    NARROW = 0.06,
+    WIDE = 0.25;
   const BLOCKS = 8;
   const strip = (s0, s1, off0, off1, y) => {
     const pos = [];
@@ -522,6 +523,8 @@ export function buildSidewalk(T, p) {
   };
   const road = batch();
   road.add(strip(0, L, -ROAD / 2, ROAD / 2, 0.03), "#55595e");
+  // lane markings: a dashed centre line
+  for (let s0 = 0.1; s0 < L - 0.1; s0 += 0.22) road.add(strip(s0, s0 + 0.11, -0.008, 0.008, 0.034), "#f4f4f0");
   g.add(road.build());
   const blocks = [];
   const rnd = mulberry(77);
@@ -536,24 +539,26 @@ export function buildSidewalk(T, p) {
       const old = strip(s0, s1, o, o + sd * NARROW, 0.045);
       before.add(old, "#a7a29a");
       works.add(old.clone(), "#a7a29a"); // the old pavement stays under the barriers until the block is rebuilt
-      after.add(strip(s0, s1, o, o + sd * WIDE, 0.05), "#efe6d2");
+      after.add(strip(s0, s1, o, o + sd * WIDE, 0.05), "#f1dcb8");
+      after.add(strip(s0, s1, o + sd * WIDE * 0.62, o + sd * WIDE * 0.8, 0.055), "#7cc05a"); // planting strip
       // scooters parked on the old pavement; barriers during the works; trees and walkers after
       for (let s = s0 + 0.05; s < s1; s += 0.09) {
         const q = at(s);
         const ang = -Math.atan2(q.dz, q.dx);
         const off = (f) => [q.x - q.dz * (o + sd * f), q.z + q.dx * (o + sd * f)];
         const [px, pz] = off(NARROW * 0.5);
-        if (rnd() < 0.7) before.add(box(0.06, 0.04, 0.025, px, T.groundY(px, pz) + 0.05, pz, ang + Math.PI / 2), ["#e74c3c", "#2d3436", "#f2f2f2", "#3498db"][Math.floor(rnd() * 4)]);
-        const [wx, wz] = off(WIDE * 0.9);
-        works.add(box(0.08, 0.06, 0.015, wx, T.groundY(wx, wz) + 0.05, wz, ang), rnd() < 0.5 ? "#ff8a3d" : "#f4f4f0");
-        const [tx, tz] = off(WIDE * 0.7);
+        if (rnd() < 0.8) before.add(box(0.08, 0.05, 0.03, px, T.groundY(px, pz) + 0.05, pz, ang + Math.PI / 2), ["#e74c3c", "#2d3436", "#f2f2f2", "#3498db"][Math.floor(rnd() * 4)]);
+        const [wx, wz] = off(WIDE * 0.95);
+        works.add(box(0.09, 0.07, 0.018, wx, T.groundY(wx, wz) + 0.05, wz, ang), rnd() < 0.5 ? "#ff8a3d" : "#f4f4f0");
+        const [tx, tz] = off(WIDE * 0.71);
         if (Math.round((s - s0) / 0.09) % 2 === 0) {
-          after.add(new THREE.IcosahedronGeometry(0.06, 0).translate(tx, T.groundY(tx, tz) + 0.16, tz), "#6db24f");
-          after.add(box(0.012, 0.1, 0.012, tx, T.groundY(tx, tz) + 0.05, tz), "#7a5a3c");
-        } else if (rnd() < 0.5) {
-          const [wpx, wpz] = off(WIDE * 0.35);
+          after.add(new THREE.IcosahedronGeometry(0.085, 0).translate(tx, T.groundY(tx, tz) + 0.2, tz), "#6db24f");
+          after.add(box(0.016, 0.13, 0.016, tx, T.groundY(tx, tz) + 0.05, tz), "#7a5a3c");
+        }
+        if (rnd() < 0.7) {
+          const [wpx, wpz] = off(WIDE * (0.2 + rnd() * 0.3));
           const coat = ["#2e6be6", "#ff8a3d", "#5cd68a", "#ff5d73"][Math.floor(rnd() * 4)];
-          for (const [geo, c] of personGeos(0.07)) after.add(geo.translate(wpx, T.groundY(wpx, wpz) + 0.05, wpz), c || coat);
+          for (const [geo, c] of personGeos(0.1)) after.add(geo.translate(wpx, T.groundY(wpx, wpz) + 0.05, wpz), c || coat);
         }
       }
     }
@@ -565,7 +570,7 @@ export function buildSidewalk(T, p) {
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.3, mid.z),
-    exclusions: [{ rect: true, x: (line[0][0] + line.at(-1)[0]) / 2, z: (line[0][1] + line.at(-1)[1]) / 2, w: 0.3, d: Math.abs(line[0][1] - line.at(-1)[1]) / 2 + 0.1 }],
+    exclusions: [{ rect: true, x: (line[0][0] + line.at(-1)[0]) / 2, z: (line[0][1] + line.at(-1)[1]) / 2, w: ROAD / 2 + WIDE + 0.12, d: Math.abs(line[0][1] - line.at(-1)[1]) / 2 + 0.1 }],
     update(d) {
       gameOnly(g);
       // blocks are rebuilt in turn from 仁愛路 northwards between the start of works and the planned completion (order illustrative)

@@ -79,8 +79,10 @@ const ICON_WAYS = [
   198401472, 198401478, 198401479, // 艋舺龍山寺
   281746873, 281746874, 281746876, 281746878, 281746880, 281746881, 281746882, 281746884, 461776386, 461776387, 461776388, // 臺北孔廟
   1463082589, 1462829501, // 大龍峒保安宮
+  442195152, 442195154, 442195155, 520269899, 1147855436, // 大巨蛋園區: Garden City 商場棟・影城棟, 洲際酒店, 遠雄巨蛋大樓, east block
 ];
-await overpass(`(way(id:${ICON_WAYS.join(",")});relation(id:206817);node(id:5121602758););out geom;`, "icons.json"); // 206817 總統府, 5121602758 美麗華摩天輪
+// 206817 總統府, 3067837 松山菸廠製菸工廠, 5121602758 美麗華摩天輪
+await overpass(`(way(id:${ICON_WAYS.join(",")});relation(id:206817,3067837);node(id:5121602758););out geom;`, "icons.json");
 // 貓空纜車: the cable line (its vertices are the towers) and its stations
 await overpass(`(way(id:71266575);node["aerialway"="station"](24.96,121.56,25.0,121.6););out geom;`, "gondola.json");
 // parks, the 故宮 grounds and 艋舺公園: open ground in the city (no blocks there; lawns and trees in the game city)

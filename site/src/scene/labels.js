@@ -45,6 +45,7 @@ function placesOf(T) {
     byName.set(name, e);
   };
   for (const ic of lm.icons) {
+    if (ic.label === false) continue; // parts of a larger landmark (the 大巨蛋 complex)
     if (ic.at) put(ic.name, ic.district, ...ic.at, T.groundY(...ic.at) + ic.height);
     else if (ic.line) {
       const n = ic.line.length;

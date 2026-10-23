@@ -5,7 +5,7 @@
 //   6–8 s    2023.12 the dome opens
 //   8–10 s   2024.02 west along the main streets as YouBike riders appear
 //   10–13 s  2025.09 south to 公館圓環: demolition, then the new crossing
-//   13–17 s  2026 up over 大安 and 中正: lunch bowls over the schools, AI Labs, 大安路 under works; holding on 今天
+//   13–17 s  2026 大安路 under works, lunch bowls over the schools, AI Labs; holding on 今天
 //   17–22 s  2027 → 2030+ CiviClaw over City Hall, then north to 松山 as the AI park blueprint rises
 import * as THREE from "three";
 import { U, DATES, smooth, easeInOut } from "./shared.js";
@@ -23,7 +23,7 @@ const KEYS = [
   [9.6, [-7, 6, 21], [-3, 0.3, 14]], // down to street level west of the dome: bikes on 忠孝 / 市民大道
   [11.2, [-18, 9, 50], [-13, 0.5, 41]], // south over 大安 toward 公館
   [12.8, [-16.7, 4.5, 49.7], [-14.3, 0.4, 46.1]], // close on 公館圓環 (the junction as the layer snaps it) as it is taken out
-  [15.4, [-13, 13, 40], [-8, 0.5, 27]], // rising over 大安 and 中正: the campuses get their lunch bowls
+  [15.4, [-12, 8, 21], [-3.9, 0.3, 15.5]], // 大安路 side on, under works, as the campuses round it get their lunch bowls
   [17.4, [2, 18, 38], [8, 0.5, 19]], // 今天: 大安路, the dome and City Hall's plaza in one view
   [19.2, [8, 14, 33], [13.8, 0.5, 19]], // City Hall's AI halo lights up
   [21.0, [-14, 14, 6], [-2, 1, -12]], // 松山 as the AI park blueprint rises

@@ -165,7 +165,9 @@ function buildAnchors(T) {
   };
 }
 
-// ---------- 臺北大巨蛋: the dome fitted to its real footprint (64 m above ground), dark and fenced → lit and in use ----------
+// ---------- 臺北大巨蛋: the real footprint and 74.5 m height; a fenced site with cranes (上任那天) → open and lit ----------
+// as the photos show it: a full, pebble-like silver shell with steep rounded sides and a flat crown, panel seams,
+// over a glass concourse ring with white floor bands; the Garden City mall and the two towers stand beside it (icons.js)
 function buildDome(T, p) {
   const { center, a, b, angle } = T.landmarks.dome;
   const [x, z] = center;
@@ -173,26 +175,78 @@ function buildDome(T, p) {
   const g = new THREE.Group();
   g.position.set(x, y, z);
   g.rotation.y = -angle;
-  const H = 64 * BM,
-    WALL = 22 * BM;
-  const shell = new THREE.MeshStandardMaterial({ color: 0xcfd5dd, roughness: 0.35, metalness: 0.2, emissive: 0xffe2b8, emissiveIntensity: 0 });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 18, 0, Math.PI * 2, 0, Math.PI / 2).scale(a, H - WALL, b).translate(0, WALL, 0), shell);
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.02, WALL, 72, 1, true).scale(a, 1, b).translate(0, WALL / 2, 0), shell);
-  const plaza = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2).scale(a + 0.45, 1, b + 0.4).translate(0, 0.012, 0), new THREE.MeshStandardMaterial({ color: 0x9a968d, roughness: 1 }));
-  // roof ribs: meridians and two parallels over the ellipsoid, like the real steel roof
-  const rib = [];
-  const P = (u, v) => new THREE.Vector3(Math.cos(u) * Math.cos(v) * a * 1.003, WALL + Math.sin(v) * (H - WALL) * 1.003, Math.sin(u) * Math.cos(v) * b * 1.003);
-  for (let k = 0; k < 28; k++) {
-    const u = (k / 28) * Math.PI * 2;
-    for (let j = 0; j < 12; j++) rib.push(P(u, (j / 12) * (Math.PI / 2)), P(u, ((j + 1) / 12) * (Math.PI / 2)));
+  const H = 74.5 * BM, // TVBS: the dome stands 74.5 m high
+    BASE = 18 * BM; // glass concourse levels under the shell
+  // shell profile: a superellipse from the eave to the crown (fuller shoulders than a sphere)
+  const RINGS = 28,
+    SEG = 120;
+  const prof = [];
+  for (let i = 0; i <= RINGS; i++) {
+    const t = (i / RINGS) * (Math.PI / 2);
+    prof.push([1.025 * Math.pow(Math.cos(t), 2 / 2.7), BASE + (H - BASE) * Math.pow(Math.sin(t), 2 / 1.9)]);
   }
-  for (const v of [0.35, 0.8])
-    for (let k = 0; k < 72; k++) rib.push(P((k / 72) * Math.PI * 2, v), P(((k + 1) / 72) * Math.PI * 2, v));
-  const ribs = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rib), new THREE.LineBasicMaterial({ color: 0x8e98a6, transparent: true, opacity: 0.55 }));
-  // roof light ring (bloom)
+  const pos = [],
+    uv = [],
+    idx = [];
+  for (let i = 0; i <= RINGS; i++)
+    for (let j = 0; j <= SEG; j++) {
+      const th = (j / SEG) * Math.PI * 2;
+      const [s, py] = prof[i];
+      pos.push(Math.cos(th) * a * s, py, Math.sin(th) * b * s);
+      uv.push(j / SEG, i / RINGS);
+    }
+  for (let i = 0; i < RINGS; i++)
+    for (let j = 0; j < SEG; j++) {
+      const k = i * (SEG + 1) + j;
+      idx.push(k, k + SEG + 1, k + 1, k + 1, k + SEG + 1, k + SEG + 2);
+    }
+  const shellGeo = new THREE.BufferGeometry();
+  shellGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  shellGeo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  shellGeo.setIndex(idx);
+  shellGeo.computeVertexNormals();
+  // panel texture: radial seams and a lighter cladding band low on the shell
+  const pc = document.createElement("canvas");
+  pc.width = 1024;
+  pc.height = 256;
+  const pctx = pc.getContext("2d");
+  const grad = pctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#e8ecf0");
+  grad.addColorStop(0.18, "#f2f4f6");
+  grad.addColorStop(0.24, "#c3cad2");
+  grad.addColorStop(0.6, "#d3d9df");
+  grad.addColorStop(1, "#dfe4e9");
+  pctx.fillStyle = grad;
+  pctx.fillRect(0, 0, 1024, 256);
+  pctx.fillStyle = "rgba(90, 100, 112, 0.16)";
+  for (let k = 0; k < 64; k++) pctx.fillRect(k * 16, 60, 1, 196);
+  for (const yy of [46, 60, 120, 190]) pctx.fillRect(0, yy, 1024, 1);
+  const panelTex = new THREE.CanvasTexture(pc);
+  panelTex.colorSpace = THREE.SRGBColorSpace;
+  panelTex.anisotropy = 8;
+  const shell = new THREE.MeshStandardMaterial({ map: panelTex, color: 0xffffff, roughness: 0.32, metalness: 0.55, emissive: 0xffe2b8, emissiveIntensity: 0 });
+  const dome = new THREE.Mesh(shellGeo, shell);
+  // glass concourse ring under the shell: blue-grey glass, white floor slabs, mullions
+  const fc = document.createElement("canvas");
+  fc.width = 512;
+  fc.height = 64;
+  const fctx = fc.getContext("2d");
+  fctx.fillStyle = "#5f7f99";
+  fctx.fillRect(0, 0, 512, 64);
+  fctx.fillStyle = "#f2f4f5";
+  for (const yy of [0, 20, 40]) fctx.fillRect(0, yy, 512, 5);
+  fctx.fillStyle = "rgba(230, 236, 240, 0.6)";
+  for (let k = 0; k < 64; k++) fctx.fillRect(k * 8, 0, 1, 64);
+  const facadeTex = new THREE.CanvasTexture(fc);
+  facadeTex.colorSpace = THREE.SRGBColorSpace;
+  facadeTex.wrapS = THREE.RepeatWrapping;
+  facadeTex.repeat.set(3, 1);
+  const glassM = new THREE.MeshStandardMaterial({ map: facadeTex, roughness: 0.25, metalness: 0.3, emissive: 0xffd9a0, emissiveMap: facadeTex, emissiveIntensity: 0 });
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, BASE, SEG, 1, true).scale(a * 0.97, 1, b * 0.97).translate(0, BASE / 2, 0), glassM);
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2).scale(a + 0.45, 1, b + 0.4).translate(0, 0.012, 0), new THREE.MeshStandardMaterial({ color: 0xb4b0a6, roughness: 1 }));
+  // eave light ring (bloom at night)
   const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0) });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 6, 96).rotateX(Math.PI / 2).scale(a, 1, b).translate(0, WALL + 0.01, 0), ringMat);
-  const crown = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.02, 6, 64).rotateX(Math.PI / 2).scale(a, 1, b).translate(0, WALL + (H - WALL) * 0.91, 0), ringMat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, 6, 120).rotateX(Math.PI / 2).scale(a * 1.025, 1, b * 1.025).translate(0, BASE + 0.005, 0), ringMat);
   // construction fence (before)
   const fenceMat = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
@@ -201,7 +255,7 @@ function buildDome(T, p) {
     fragmentShader: `uniform float uNight; varying vec2 vUv; void main(){ float s = step(0.5, fract(vUv.x * 60.0)); vec3 c = mix(vec3(0.85,0.85,0.8), vec3(0.95,0.45,0.15), s) * mix(0.6, 0.18, uNight); gl_FragColor = vec4(c, 1.0); }`,
   });
   const fence = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.14, 96, 1, true).scale(a + 0.35, 1, b + 0.3).translate(0, 0.07, 0), fenceMat);
-  // light beams (after)
+  // light beams (after, night city)
   const beamMat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -223,7 +277,7 @@ function buildDome(T, p) {
   // as found (2022.12): the shell up but the site still fenced, scaffolding round the base, two tower cranes, bare ground
   const works = new THREE.Group();
   const scaffold = new THREE.Mesh(
-    new THREE.CylinderGeometry(1, 1, WALL * 1.15, 72, 4, true).scale(a + 0.06, 1, b + 0.06).translate(0, (WALL * 1.15) / 2, 0),
+    new THREE.CylinderGeometry(1, 1, BASE * 1.6, 72, 4, true).scale(a + 0.08, 1, b + 0.08).translate(0, (BASE * 1.6) / 2, 0),
     new THREE.MeshLambertMaterial({ color: 0xd98a3a, wireframe: true }),
   );
   const dirt = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2).scale(a + 0.45, 1, b + 0.4).translate(0, 0.016, 0), new THREE.MeshLambertMaterial({ color: 0x9c8466 }));
@@ -233,7 +287,19 @@ function buildDome(T, p) {
     c.position.set(cx, 0, cz);
     works.add(c);
   }
-  g.add(plaza, wall, dome, ribs, ring, crown, fence, beams, works);
+  // the crowd on the plaza once it is open (game city)
+  const crowd = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.018, 0.04, 2, 6).translate(0, 0.04, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }), 160);
+  const rnd = mulberry(91);
+  const m4 = new THREE.Matrix4();
+  const tints = ["#ff5d73", "#2e6be6", "#ffd23f", "#5cd68a", "#f4f4f0", "#1d3557"].map((h) => new THREE.Color(h));
+  for (let i = 0; i < 160; i++) {
+    const th = rnd() * Math.PI * 2,
+      r = 1.06 + rnd() * 0.3;
+    m4.makeTranslation(Math.cos(th) * a * r, 0.012, Math.sin(th) * b * r);
+    crowd.setMatrixAt(i, m4);
+    crowd.setColorAt(i, tints[i % tints.length]);
+  }
+  g.add(plaza, wall, dome, ring, fence, beams, works, crowd);
   for (const o of [plaza, wall, dome]) o.castShadow = o.receiveShadow = true;
   return {
     group: g,
@@ -244,9 +310,13 @@ function buildDome(T, p) {
       fence.visible = on < 0.5;
       works.visible = on < 0.5;
       for (const c of works.children) if (c.userData.jib) c.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.22 + c.position.x) * 1.3;
+      crowd.visible = on > 0.5 && U.uGame.value > 0.5;
       beams.visible = on > 0.01;
-      shell.emissiveIntensity = on * (0.04 + 0.16 * U.uNight.value) + flash * 0.35;
-      shell.color.setHex(on > 0.5 ? 0xe4e8ee : 0x9da3ab);
+      // unfinished: a duller, darker shell and dark glass; open: bright silver, the concourse lit at night
+      shell.color.setHex(on > 0.5 ? 0xffffff : 0x9aa1a9);
+      shell.emissiveIntensity = on * 0.1 * U.uNight.value + flash * 0.35;
+      glassM.emissiveIntensity = on * 0.9 * U.uNight.value;
+      glassM.color.setHex(on > 0.5 ? 0xffffff : 0x8a9097);
       ringMat.color.setRGB(2.2, 1.6, 0.95).multiplyScalar(on * (0.35 + 0.65 * U.uNight.value) + flash * 0.6);
       beamMat.uniforms.uA.value = (on * (0.15 + 0.35 * U.uNight.value) + flash * 0.6) * (1 - U.uGame.value);
       beams.rotation.y = U.uTime.value * 0.15;

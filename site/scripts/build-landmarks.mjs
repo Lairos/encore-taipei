@@ -34,6 +34,13 @@ const ICONS = {
   5121602758: { name: "美麗華摩天輪", district: "中山區", kind: "wheel", height: 100, diameter: 70 },
   // 信義區 (臺北101 and 大巨蛋 are policy landmarks with their own models)
   142113976: { name: "臺北市政府", district: "信義區", wall: 48, roof: 0, kind: "flat", wallC: "#ece6d8", roofC: "#a9aaa6", windows: true },
+  // the 大巨蛋 complex around the dome (the dome itself is a policy landmark): no labels of their own
+  442195152: { name: "大巨蛋園區", label: false, district: "信義區", wall: 32, roof: 0, kind: "flat", wallC: "#dfe5ea", roofC: "#a7b0b8", windows: true }, // Garden City 商場棟
+  442195154: { name: "大巨蛋園區", label: false, district: "信義區", wall: 28, roof: 0, kind: "flat", wallC: "#dfe5ea", roofC: "#a7b0b8", windows: true }, // 影城棟
+  442195155: { name: "大巨蛋園區", label: false, district: "信義區", wall: 100, roof: 0, kind: "flat", wallC: "#7fa3bf", roofC: "#8d969e", windows: true }, // 臺北洲際酒店, 100 m
+  520269899: { name: "大巨蛋園區", label: false, district: "信義區", wall: 105, roof: 0, kind: "flat", wallC: "#7fa3bf", roofC: "#8d969e", windows: true }, // 遠雄巨蛋大樓, 105 m
+  1147855436: { name: "大巨蛋園區", label: false, district: "信義區", wall: 18, roof: 0, kind: "flat", wallC: "#dfe5ea", roofC: "#a7b0b8", windows: true },
+  3067837: { name: "松山文創園區", district: "信義區", wall: 10, roof: 0, kind: "flat", wallC: "#e8dcc2", roofC: "#7b848c" }, // 1937 製菸工廠 round its courtyard
   189788192: { name: "國父紀念館", district: "信義區", wall: 16, roof: 15, kind: "hall", eaves: 1, ridge: 0.4, wallC: "#f1e9d8", roofC: "#e9b52f", accent: "#c98f1c", grounds: [380, 330, "plaza"] }, // 30.4 m, golden roof; 中山公園 around it
   // 萬華區
   198401479: { name: "艋舺龍山寺", district: "萬華區", ...TEMPLE, wall: 8, roof: 10, eaves: 2 }, // 正殿
