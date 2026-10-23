@@ -176,7 +176,8 @@ export function createLabels({ T, root, onPick }) {
             const cx = x + sx * l.w,
               cy = l.kind === "district" ? y + sy * l.h : y - l.h / 2 - 8;
             const b = [cx - l.w / 2, cy - l.h / 2, cx + l.w / 2, cy + l.h / 2];
-            if (!taken.some((t) => b[0] < t[2] + 4 && b[2] > t[0] - 4 && b[1] < t[3] + 2 && b[3] > t[1] - 2)) {
+            const inside = b[0] >= 4 && b[2] <= w - 4 && b[1] >= 4 && b[3] <= h - 4;
+            if (inside && !taken.some((t) => b[0] < t[2] + 4 && b[2] > t[0] - 4 && b[1] < t[3] + 2 && b[3] > t[1] - 2)) {
               box = b;
               break;
             }

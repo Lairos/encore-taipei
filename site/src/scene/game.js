@@ -202,7 +202,9 @@ const BUILDING_COLOR = /* glsl */ `
 `;
 
 // Instances are split into map tiles so the camera (and the sun's shadow camera) can skip tiles out of view.
-const TILE = 24;
+// 4.8 km tiles: every tile costs a draw call per archetype (and again in the shadow pass), so fewer, larger tiles
+// are cheaper than finer culling — the GPU handles the extra instances easily, the CPU does not handle extra calls
+const TILE = 48;
 function byTile(list, xz) {
   const m = new Map();
   for (const it of list) {
@@ -220,9 +222,10 @@ function shareGeometry(base) {
   if (base.index) g.setIndex(base.index);
   return g;
 }
-function finishTile(mesh) {
+function finishTile(mesh, shadow = true) {
   mesh.computeBoundingSphere();
-  mesh.castShadow = mesh.receiveShadow = true;
+  mesh.castShadow = shadow;
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -345,7 +348,7 @@ export function buildTrees(T, items, quality, parks, keepClear) {
         mesh.setMatrixAt(i, m);
         mesh.setColorAt(i, greens[Math.floor(r * greens.length)]);
       });
-      finishTile(mesh);
+      finishTile(mesh, quality === "high"); // tree shadows only on desktop
       if (maxDist) {
         mesh.userData.maxDist = maxDist;
         lod.push(mesh);

@@ -1128,7 +1128,17 @@ body.is-game .legend {
 @media (max-width: 760px) {
   .status-bar {
     top: auto;
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 150px);
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + var(--hud-h, 170px) + 8px);
+  }
+  /* the status bar above already shows the stage colours; the legend keeps only the 規劃示意 note */
+  .legend > span:not(.future-note) {
+    display: none;
+  }
+  .legend {
+    margin-bottom: 0;
+  }
+  .future-note {
+    margin: 0 0 8px;
   }
   .status-bar span {
     padding: 5px 9px;

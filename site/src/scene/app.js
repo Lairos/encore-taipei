@@ -128,7 +128,8 @@ async function start() {
     if (!p) return;
     ui.showPolicy(p, mainDate);
     const l = world.layers.get(id);
-    if (l?.anchor) flyTo(l.anchor, FLY_DIST[id] || 14);
+    // on a phone the card covers the lower part of the screen: frame the place in the part above it
+    if (l?.anchor) flyTo(l.anchor, FLY_DIST[id] || 14, innerWidth <= 760 ? 0.22 : 0);
     // a planned item is only visible once the timeline reaches it
     if (p.status === "planned" && mainDate < p.event) tweenDate(Math.max(p.event + 1.2, STOPS[2]));
   }
@@ -141,16 +142,20 @@ async function start() {
 
   // fly distances are given for the cinematic lens; scale them to the current one
   const lensScale = () => Math.tan(THREE.MathUtils.degToRad(baseFov()) / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-  function flyTo(anchor, dist) {
+  // lift: how far above the middle of the screen the place should end up (fraction of the screen height)
+  function flyTo(anchor, dist, lift = 0) {
     dist *= lensScale();
     const dir = camera.position.clone().sub(controls.target).normalize();
     if (dir.y < 0.5) dir.setY(0.5).normalize();
+    const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const toward = new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar((lift * viewH) / Math.max(0.4, dir.y));
+    const toT = anchor.clone().setY(anchor.y - dist * 0.05).add(toward);
     fly = {
       t0: performance.now(),
       fromP: camera.position.clone(),
       fromT: controls.target.clone(),
-      toT: anchor.clone().setY(anchor.y - dist * 0.05),
-      toP: anchor.clone().add(dir.multiplyScalar(dist)),
+      toT,
+      toP: anchor.clone().add(toward).add(dir.multiplyScalar(dist)),
     };
   }
 

@@ -121,10 +121,30 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
   }
   const v = new THREE.Vector3();
   const pinRects = [];
+  // the interface panels pins and map labels keep clear of (re-measured twice a second: layout reads are not free)
+  const panels = [".brand", "#list-toggle", ".status-bar", "#hud", "#card", ".curtain-label.left", ".curtain-label.right"].map((s) => $(s)).filter(Boolean);
+  let panelRects = [],
+    panelAge = 1e9;
+  const measurePanels = () => {
+    panelRects = panels
+      .filter((el) => !el.hidden && getComputedStyle(el).display !== "none" && +getComputedStyle(el).opacity > 0.05)
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0)
+      .map((r) => [r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]);
+    // the bottom panel's height, for the status bar sitting on top of it on phones
+    const hud = $("#hud").getBoundingClientRect();
+    document.documentElement.style.setProperty("--hud-h", `${Math.round(hud.height)}px`);
+  };
+  addEventListener("resize", () => (panelAge = 1e9));
   function updatePins(camera, dateRight, curtainOn, split) {
     const w = innerWidth,
       h = innerHeight;
+    if (++panelAge > 30) {
+      measurePanels();
+      panelAge = 0;
+    }
     pinRects.length = 0;
+    pinRects.push(...panelRects);
     // pins in policy order; one that would overlap a pin already placed waits until the view zooms in
     for (const pin of pins.values()) {
       v.copy(pin.anchor).project(camera);
@@ -137,7 +157,8 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
         if (!pin.w) [pin.w, pin.h] = [pin.el.offsetWidth, pin.el.offsetHeight];
         const r = [x - pin.w / 2, y - 14 - pin.h, x + pin.w / 2, y];
         const active = pin.el.classList.contains("active");
-        if (!active && pinRects.some((t) => r[0] < t[2] + 2 && r[2] > t[0] - 2 && r[1] < t[3] && r[3] > t[1])) visible = false;
+        const offEdge = r[0] < 4 || r[2] > w - 4 || r[1] < 4; // half off the screen reads as broken on a phone
+        if (!active && (offEdge || pinRects.some((t) => r[0] < t[2] + 2 && r[2] > t[0] - 2 && r[1] < t[3] && r[3] > t[1]))) visible = false;
         else pinRects.push(r);
       }
       pin.el.style.display = visible ? "" : "none";

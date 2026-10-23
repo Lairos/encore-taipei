@@ -91,6 +91,62 @@ function makeCrane(height = 2.2) {
   return c;
 }
 
+// static meshes under `root`, merged into one mesh per material (fewer draw calls, same look)
+function mergeByMaterial(root) {
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert();
+  const byMat = new Map();
+  const meshes = [];
+  root.traverse((o) => o.isMesh && !o.isInstancedMesh && meshes.push(o));
+  for (const o of meshes) {
+    let g = o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    if (g.index) g = g.toNonIndexed();
+    g.deleteAttribute("uv");
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(g);
+    o.removeFromParent();
+  }
+  for (const [m, geos] of byMat) {
+    const merged = new THREE.Mesh(mergeGeometries(geos), m);
+    merged.castShadow = merged.receiveShadow = true;
+    root.add(merged);
+  }
+  return root;
+}
+
+// tower cranes as two instanced meshes (masts, jibs); each shows from its date, jibs slewing
+function craneField(list) {
+  const n = list.length;
+  const masts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 1, 0.08).translate(0, 0.5, 0), craneMat, n);
+  const jibs = new THREE.InstancedMesh(mergeGeometries([box(1.6, 0.06, 0.06, 0.5, 0, 0), box(0.06, 0.5, 0.02, 1.1, -0.5, 0)]), craneMat, n);
+  masts.castShadow = jibs.castShadow = true;
+  masts.frustumCulled = jibs.frustumCulled = false;
+  const g = new THREE.Group();
+  g.add(masts, jibs);
+  const m = new THREE.Matrix4(),
+    q = new THREE.Quaternion(),
+    up = new THREE.Vector3(0, 1, 0),
+    v = new THREE.Vector3(),
+    s = new THREE.Vector3(),
+    zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  return {
+    group: g,
+    update(d, hide = false) {
+      const t = U.uTime.value;
+      list.forEach((c, i) => {
+        if (hide || d < c.date) {
+          masts.setMatrixAt(i, zero);
+          jibs.setMatrixAt(i, zero);
+          return;
+        }
+        masts.setMatrixAt(i, m.compose(v.set(c.x, c.y, c.z), q.identity(), s.set(1, c.h, 1)));
+        jibs.setMatrixAt(i, m.compose(v.set(c.x, c.y + c.h, c.z), q.setFromAxisAngle(up, Math.sin(t * 0.25 + c.phase) * 1.2), s.set(1, 1, 1)));
+      });
+      masts.instanceMatrix.needsUpdate = jibs.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
 // glowing ground ring used to mark a delivered milestone
 function groundRing(r, color) {
   const m = glow(new THREE.ShaderMaterial({
@@ -148,12 +204,10 @@ function buildAnchors(T) {
   for (let k = 0; k < 8; k++) parts.push(sq(0.42, 0.33, 34 * BM, (100 + k * 34) * BM));
   parts.push(sq(0.27, 0.3, 30 * BM, 372 * BM), sq(0.2, 0.24, 26 * BM, 402 * BM), sq(0.14, 0.17, 21 * BM, 428 * BM));
   parts.push(new THREE.CylinderGeometry(0.015, 0.05, 59 * BM, 6).translate(0, 449 * BM + (59 * BM) / 2, 0));
-  for (const geo of parts) {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    m.castShadow = m.receiveShadow = true;
-    g.add(m);
-  }
+  const tower = new THREE.Mesh(mergeGeometries(parts.map((p) => (p.index ? p.toNonIndexed() : p))), mat);
+  tower.position.set(x, y, z);
+  tower.castShadow = tower.receiveShadow = true;
+  g.add(tower);
   const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 0.6, 0.4) }));
   tip.position.set(x, y + 508 * BM, z);
   g.add(tip);
@@ -482,11 +536,13 @@ function buildEastRing(T, p) {
   const stationMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0xffffff, emissiveIntensity: 0.15 });
   const g = new THREE.Group();
   g.add(tube);
+  const discs = new THREE.Group();
   for (const s of stations.filter((s) => !["Y29", "Y1"].includes(s.id))) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 20), stationMat);
     m.position.set(s.x, T.groundY(s.x, s.z) + 0.04, s.z);
-    g.add(m);
+    discs.add(m);
   }
+  g.add(mergeByMaterial(discs));
   const cranes = [];
   const sites = [];
   for (const k of segs.filter((k) => k.start)) {
@@ -494,13 +550,9 @@ function buildEastRing(T, p) {
     for (const s of ids) sites.push([s.x, s.z, k.date]);
     if (k.id === "CF763") sites.push([...via.wanfangShaft, k.date], [...via.zooShaft, k.date]);
   }
-  for (const [sx, sz, date] of sites) {
-    const c = makeCrane(1.8);
-    c.position.set(sx + 0.25, T.groundY(sx, sz), sz + 0.2);
-    Object.assign(c.userData, { date, phase: sx });
-    cranes.push(c);
-    g.add(c);
-  }
+  for (const [sx, sz, date] of sites) cranes.push({ x: sx + 0.25, y: T.groundY(sx, sz), z: sz + 0.2, h: 1.8, date, phase: sx });
+  const craneSet = craneField(cranes);
+  g.add(craneSet.group);
   // in service (target 2032): station entrances in the line colour, and trains running the (underground) route
   const opened = new THREE.Group();
   const pavM = new THREE.MeshLambertMaterial({ color: 0xf4f4f0 }),
@@ -559,7 +611,7 @@ function buildEastRing(T, p) {
   for (let i = 0; i < CARS * TRAINS; i++) trains.setColorAt(i, new THREE.Color(i % CARS === 0 ? "#ffcc1a" : "#f4f4f0"));
   trains.castShadow = true;
   opened.add(trains);
-  g.add(opened);
+  g.add(mergeByMaterial(opened)); // entrances merged; the instanced crowds and trains stay as they are
   const tm = new THREE.Matrix4(),
     tq = new THREE.Quaternion(),
     tv = new THREE.Vector3(),
@@ -602,10 +654,7 @@ function buildEastRing(T, p) {
         });
         walkers.instanceMatrix.needsUpdate = heads.instanceMatrix.needsUpdate = true;
       }
-      for (const c of cranes) {
-        c.visible = d >= c.userData.date && !done;
-        c.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.25 + c.userData.phase) * 1.2;
-      }
+      craneSet.update(d, done);
     },
   };
 }
@@ -949,6 +998,7 @@ function buildSongshan(T, p) {
     p.traverse((o) => o.isMesh && (o.castShadow = true));
     return p;
   };
+  const planes = new THREE.Group();
   for (const a of ap.aprons) {
     const pts = [];
     for (let i = 0; i < a.length; i += 2) pts.push([a[i], a[i + 1]]);
@@ -966,9 +1016,10 @@ function buildSongshan(T, p) {
       const pl = plane();
       pl.position.set(px, yAt(px, pz) + 0.05, pz);
       pl.rotation.y = -ax + Math.PI / 2; // noses facing across the apron, towards the terminal
-      airport.add(pl);
+      planes.add(pl);
     }
   }
+  airport.add(mergeByMaterial(planes));
   // runway with its markings (edge lines, dashed centreline, threshold bars, numbers area), draped over the ground
   const rc = document.createElement("canvas");
   rc.width = 2048;
@@ -1032,7 +1083,8 @@ function buildSongshan(T, p) {
     aiX = L / 2 - aiL / 2, // west part of the south side
     homeL = L - aiL,
     homeX = -L / 2 + homeL / 2;
-  const flatMat = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const flatMats = new Map();
+  const flatMat = (c) => (flatMats.has(c) || flatMats.set(c, new THREE.MeshLambertMaterial({ color: c })), flatMats.get(c));
   const plate = (w, d, x, z, c, lift = 0) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), flatMat(c));
     m.position.set(x, topY + 0.03 + lift, z);
@@ -1052,7 +1104,7 @@ function buildSongshan(T, p) {
   const roads = new THREE.Group();
   for (const rx of [-L * 0.3, 0.02 * L, L * 0.3]) roads.add(plate(0.28, W, rx, 0, "#55595e", 0.02));
   roads.add(plate(L, 0.24, 0, W / 2 - parkW, "#55595e", 0.02), plate(L, 0.2, 0, southZ, "#55595e", 0.02));
-  vision.add(ground, roads);
+  vision.add(mergeByMaterial(ground), mergeByMaterial(roads));
   // the park's trees, in the game city and (as soft lights) in the night city
   const nTrees = 520;
   const treeGeo = new THREE.IcosahedronGeometry(0.75, 0).scale(1, 1.1, 1).translate(0, 0.85, 0);
@@ -1200,13 +1252,8 @@ function buildSongshan(T, p) {
   const bands = new THREE.Mesh(mergeGeometries(bandGeo), cyanGlow);
   const masts = new THREE.Mesh(mergeGeometries(mastGeo.length ? mastGeo : [new THREE.BoxGeometry(0, 0, 0)]), new THREE.MeshLambertMaterial({ color: 0xdfe5ea }));
   tech.add(bands, masts);
-  const mastTips = new THREE.Group();
-  for (const [, x, z, , , h] of towers.filter((t) => t[5] > 1.8)) {
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.4, 0.3) }));
-    tip.position.set(x, topY + h + 0.5, z);
-    mastTips.add(tip);
-  }
-  tech.add(mastTips);
+  const tipGeo = towers.filter((t) => t[5] > 1.8).map(([, x, z, , , h]) => new THREE.SphereGeometry(0.04, 8, 6).translate(x, topY + h + 0.5, z));
+  if (tipGeo.length) tech.add(new THREE.Mesh(mergeGeometries(tipGeo), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.4, 0.3) })));
   // solar arrays and cooling units on the data centres
   const solar = [];
   for (const [, x, z, w, d, h] of datas)

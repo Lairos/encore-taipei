@@ -34,22 +34,46 @@ function mesh(geo, mat, shadow = true) {
   m.castShadow = m.receiveShadow = shadow;
   return m;
 }
-// many small parts → one mesh per colour
+// many small parts → one mesh, coloured per vertex
+const batchMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 function batch() {
-  const byColor = new Map();
+  const geos = [];
+  const col = new THREE.Color();
   return {
     add(geo, color) {
       const g = geo.index ? geo.toNonIndexed() : geo;
       g.deleteAttribute("uv");
-      if (!byColor.has(color)) byColor.set(color, []);
-      byColor.get(color).push(g);
+      col.set(color);
+      const n = g.attributes.position.count;
+      const c = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) c.set([col.r, col.g, col.b], i * 3);
+      g.setAttribute("color", new THREE.BufferAttribute(c, 3));
+      geos.push(g);
     },
     build() {
       const grp = new THREE.Group();
-      for (const [c, geos] of byColor) grp.add(mesh(mergeGeometries(geos), toon(c, { side: THREE.DoubleSide })));
+      if (geos.length) grp.add(mesh(mergeGeometries(geos), batchMat));
       return grp;
     },
   };
+}
+// static meshes under `root`, merged into one mesh per material
+function flatten(root) {
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert();
+  const byMat = new Map(),
+    meshes = [];
+  root.traverse((o) => o.isMesh && !o.isInstancedMesh && meshes.push(o));
+  for (const o of meshes) {
+    let g = o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    if (g.index) g = g.toNonIndexed();
+    g.deleteAttribute("uv");
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(g);
+    o.removeFromParent();
+  }
+  for (const [m, geos] of byMat) root.add(mesh(mergeGeometries(geos), m));
+  return root;
 }
 // a built prop's meshes, baked into a batch at (x, y, z)
 function bake(group, b, x, y, z) {
@@ -159,14 +183,17 @@ export function buildElder(T, p) {
   for (const h of list) bake(model, halls, h.at[0], T.groundY(...h.at), h.at[1]);
   const built = halls.build();
   g.add(built);
-  for (const h of list) {
-    const card = new THREE.Group();
-    card.add(mesh(cardGeo, cardMat), mesh(new THREE.BoxGeometry(0.5, 0.06, 0.045).translate(0, 0.08, 0), stripe));
-    card.position.set(h.at[0], T.groundY(...h.at) + 1.05, h.at[1]);
-    card.userData.y = card.position.y;
-    cards.push(card);
-    g.add(card);
-  }
+  // the cards: two instanced meshes (card, stripe) turning over the hospitals
+  const cardInst = new THREE.InstancedMesh(cardGeo, cardMat, list.length),
+    stripeInst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.06, 0.045).translate(0, 0.08, 0), stripe, list.length);
+  cardInst.frustumCulled = stripeInst.frustumCulled = false;
+  for (const h of list) cards.push({ x: h.at[0], y: T.groundY(...h.at) + 1.05, z: h.at[1] });
+  g.add(cardInst, stripeInst);
+  const cm = new THREE.Matrix4(),
+    cq = new THREE.Quaternion(),
+    cv = new THREE.Vector3(),
+    cs = new THREE.Vector3(),
+    upY = new THREE.Vector3(0, 1, 0);
   const first = list[0].at;
   return {
     group: g,
@@ -178,12 +205,14 @@ export function buildElder(T, p) {
       built.visible = k > 0.5;
       const on = d >= p.event && k > 0.01;
       const t = U.uTime.value;
+      cardInst.visible = stripeInst.visible = on;
+      if (!on) return;
       cards.forEach((c, i) => {
-        c.visible = on;
-        c.rotation.y = t * 0.9 + i;
-        c.position.y = c.userData.y + Math.sin(t * 1.4 + i) * 0.05;
-        c.scale.setScalar(k * (1 + flash * 0.5));
+        cm.compose(cv.set(c.x, c.y + Math.sin(t * 1.4 + i) * 0.05, c.z), cq.setFromAxisAngle(upY, t * 0.9 + i), cs.setScalar(k * (1 + flash * 0.5)));
+        cardInst.setMatrixAt(i, cm);
+        stripeInst.setMatrixAt(i, cm);
       });
+      cardInst.instanceMatrix.needsUpdate = stripeInst.instanceMatrix.needsUpdate = true;
     },
   };
 }
@@ -219,7 +248,7 @@ export function buildChildcare(T, p) {
   extra.add(mesh(box(0.06, 0.32, 0.06, -0.62, 0, -0.1), toon("#38b6ff")), mesh(new THREE.BoxGeometry(0.46, 0.03, 0.12).rotateZ(0.6).translate(-0.44, 0.17, -0.1), toon("#ffd23f")));
   extra.add(mesh(new THREE.CircleGeometry(0.6, 24).rotateX(-Math.PI / 2).translate(0.1, 0.006, 0.35), toon("#9ad36a"), false));
   extra.add(person("#ff8a3d", 0.12).translateX(0.3).translateZ(0.55), person("#5cd68a", 0.1).translateX(0.15).translateZ(0.62));
-  g.add(extra);
+  g.add(flatten(extra));
   return {
     group: g,
     anchor: new THREE.Vector3(x, T.groundY(x, z) + 1.4, z),
@@ -246,7 +275,7 @@ export function buildWorktime(T, p) {
   face.position.y = 1.0;
   face.add(mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.06, 32).rotateX(Math.PI / 2), toon("#ffffff")));
   face.add(mesh(new THREE.TorusGeometry(0.26, 0.025, 6, 32), toon("#1d3557")));
-  for (let k = 0; k < 12; k++) face.add(mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02).translate(0, 0.21, 0.035).rotateZ((k / 12) * Math.PI * 2), toon("#1d3557"), false));
+  face.add(mesh(mergeGeometries(Array.from({ length: 12 }, (_, k) => new THREE.BoxGeometry(0.02, 0.05, 0.02).translate(0, 0.21, 0.035).rotateZ((k / 12) * Math.PI * 2))), toon("#1d3557"), false));
   const hour = mesh(new THREE.BoxGeometry(0.03, 0.13, 0.02).translate(0, 0.06, 0.05), toon("#1d3557"), false);
   const minute = mesh(new THREE.BoxGeometry(0.02, 0.2, 0.02).translate(0, 0.09, 0.06), toon("#ff5d73"), false);
   face.add(hour, minute);
@@ -256,6 +285,7 @@ export function buildWorktime(T, p) {
   const fam = (n0, dx) => {
     const f = new THREE.Group();
     f.add(person("#2e6be6").translateX(dx), person("#ff8a3d").translateX(dx + 0.12), person("#ffd23f", 0.1).translateX(dx + 0.06).translateZ(0.1));
+    flatten(f);
     f.position.z = 0.35;
     f.userData.n0 = n0;
     return f;

@@ -279,29 +279,40 @@ export function buildIcons(T) {
   const wheels = [];
   const mats = new Map();
   const buckets = new Map();
+  // one material per finish (roughness, metal, windows, sides, night glow) with the colour per vertex, so the
+  // whole set of landmarks draws in a handful of calls; mat() hands back the finish and the colour together
   const mat = (color, { rough = 0.8, metal = 0, map = false, double = false, glow = 0.28 } = {}) => {
-    const key = `${color}|${rough}|${metal}|${map}|${double}|${glow}`;
+    const key = `${rough}|${metal}|${map}|${double}|${glow}`;
     if (!mats.has(key)) {
-      const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive: color, emissiveIntensity: 0, side: double ? THREE.DoubleSide : THREE.FrontSide });
-      if (map) Object.assign(m, { map: bays(), emissive: new THREE.Color(0xffffff), emissiveMap: bays(true) });
-      m.onBeforeCompile = GROW;
+      const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: rough, metalness: metal, emissive: 0xffffff, emissiveIntensity: 0, side: double ? THREE.DoubleSide : THREE.FrontSide });
+      if (map) Object.assign(m, { map: bays(), emissiveMap: bays(true) });
+      // floodlit in its own colour at night (lit windows stay warm white)
+      m.onBeforeCompile = (sh) => {
+        GROW(sh);
+        if (!map) sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n  totalEmissiveRadiance *= vColor.rgb;");
+      };
       m.customProgramCacheKey = () => `icon-grow|${map}`;
       m.userData.glow = map ? 0.6 : glow;
       lit.push(m);
       mats.set(key, m);
     }
-    return mats.get(key);
+    return { m: mats.get(key), color: new THREE.Color(color) };
   };
-  const add = (geo, m) => {
+  const add = (geo, { m, color }) => {
     if (!buckets.has(m)) buckets.set(m, []);
     let g = geo.index ? geo.toNonIndexed() : geo;
     if (!m.map) g.deleteAttribute("uv");
     const n = g.attributes.position.count;
     const pv = new Float32Array(n * 3),
-      kk = new Float32Array(n).fill(cur.k);
-    for (let i = 0; i < n; i++) pv.set([cur.pivot[0], cur.y0, cur.pivot[1]], i * 3);
+      kk = new Float32Array(n).fill(cur.k),
+      cc = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pv.set([cur.pivot[0], cur.y0, cur.pivot[1]], i * 3);
+      cc.set([color.r, color.g, color.b], i * 3);
+    }
     g.setAttribute("aPivot", new THREE.BufferAttribute(pv, 3));
     g.setAttribute("aK", new THREE.BufferAttribute(kk, 1));
+    g.setAttribute("color", new THREE.BufferAttribute(cc, 3));
     buckets.get(m).push(g);
   };
 

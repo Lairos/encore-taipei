@@ -176,10 +176,10 @@ export async function createWorld(scene, { quality }) {
       const dist = camera.position.distanceTo(target);
       for (const m of trees.lod) m.visible = camera.position.distanceTo(m.boundingSphere.center) < m.userData.maxDist + m.boundingSphere.radius;
       // shadows read only when close; far away they cost a full shadow pass for nothing
-      const near = 1 - smooth(110, 170, dist);
+      const near = 1 - smooth(70, 120, dist);
       sun.shadow.intensity = styleShadow * near;
       shadowsLive = sun.shadow.intensity > 0.01;
-      const half = THREE.MathUtils.clamp(dist * 0.75, 12, 150);
+      const half = THREE.MathUtils.clamp(dist * 0.6, 10, 90);
       const cam = sun.shadow.camera;
       if (Math.abs(cam.right - half) > 0.5) {
         Object.assign(cam, { left: -half, right: half, top: half, bottom: -half, near: 1, far: 400 });
