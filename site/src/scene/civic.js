@@ -507,6 +507,7 @@ export function buildUrban5099(T, p) {
     group: g,
     anchor: new THREE.Vector3(a.x, a.y + 2.2, a.z),
     exclusions: sites.map(({ s }) => ({ x: s.position.x, z: s.position.z, r: 0.95 })),
+    crowd: sites.map(({ s }) => ({ x: s.position.x, z: s.position.z, r: 2, n: 50, from: BUILT })), // the new blocks in use
     update(d, flash) {
       for (const { s, old, plan, built, key, lot, marked } of sites) {
         gameOnly(s);
@@ -608,10 +609,32 @@ export function buildSidewalk(T, p) {
     g.add(blk.before, blk.works, blk.after);
     blocks.push(blk);
   }
+  // people walking each block: a few squeezed onto the old pavement until its works start, many on the new one
+  // once it is rebuilt (the dates invert the smooth() schedule in update below)
+  const dateAt = (f) => {
+    let lo = 0,
+      hi = 1;
+    for (let i = 0; i < 30; i++) {
+      const m = (lo + hi) / 2;
+      if (m * m * (3 - 2 * m) < f) lo = m;
+      else hi = m;
+    }
+    return p.event + lo * (done - p.event);
+  };
+  const crowd = [];
+  for (let b = 0; b < BLOCKS; b++) {
+    const a = at((L * b) / BLOCKS + 0.06),
+      c = at((L * (b + 1)) / BLOCKS - 0.06);
+    const along = (o) => [a.x - a.dz * o, a.z + a.dx * o, c.x - c.dz * o, c.z + c.dx * o];
+    const sides = (offs) => offs.flatMap((o) => [along(o), along(-o)]);
+    crowd.push({ walks: sides([ROAD / 2 + NARROW * 0.5]), n: 3, from: -1e4, to: b <= 1 ? p.event : dateAt((b - 1) / BLOCKS), lift: 0.045, jitter: 0.005 });
+    crowd.push({ walks: sides([ROAD / 2 + WIDE * 0.3, ROAD / 2 + WIDE * 0.48]), n: 18, from: dateAt((b + 1) / BLOCKS), lift: 0.05, jitter: 0.02 });
+  }
   const mid = at(L / 2);
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.3, mid.z),
+    crowd,
     exclusions: [{ rect: true, x: (line[0][0] + line.at(-1)[0]) / 2, z: (line[0][1] + line.at(-1)[1]) / 2, w: ROAD / 2 + WIDE + 0.12, d: Math.abs(line[0][1] - line.at(-1)[1]) / 2 + 0.1 }],
     update(d) {
       gameOnly(g);

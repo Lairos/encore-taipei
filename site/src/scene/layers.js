@@ -360,6 +360,7 @@ function buildDome(T, p) {
     group: g,
     anchor: new THREE.Vector3(x, y + H + 0.6, z),
     exclusions: [{ x, z, r: a + 0.5 }],
+    crowd: [{ x, z, r: a + 2.6, n: 240, from: p.event }], // the streets round it fill once it opens
     update(d, flash) {
       const on = smooth(p.event - 0.02, p.event + 0.02, d);
       fence.visible = on < 0.5;
@@ -460,6 +461,7 @@ function buildGongguan(T, p) {
     group: g,
     anchor: new THREE.Vector3(x, y + 0.9, z),
     exclusions: [{ x, z, r: 0.9 }],
+    crowd: [{ x, z, r: 2.2, n: 110, from: p.event }], // the plain junction is easier to cross on foot
     update(d, flash) {
       const on = d >= p.event;
       const dig = d >= p.works && !on;
@@ -624,6 +626,7 @@ function buildEastRing(T, p) {
     group: g,
     anchor: new THREE.Vector3(mid.x, T.groundY(mid.x, mid.z) + 1.4, mid.z),
     exclusions: stations.map((st) => ({ x: st.x + 0.4, z: st.z - 0.3, r: 0.8 })),
+    crowd: stations.map((st) => ({ x: st.x + 0.4, z: st.z - 0.3, r: 2, n: 30, from: p.done })), // busier streets round each station
     update(d, flash) {
       mat.uniforms.uFlash.value = flash;
       const done = d >= p.done;
@@ -736,6 +739,7 @@ function buildNvidia(T, p) {
     group: g,
     anchor: new THREE.Vector3(cx, y + 2.0, cz),
     exclusions: [{ x: cx, z: cz, r: 1.6 }],
+    crowd: [{ x: cx, z: cz, r: 3.2, n: 150, from: p.done }], // people coming to work once the HQ opens
     update(d, flash) {
       const signed = d >= p.event,
         building = d >= p.works,
@@ -948,6 +952,7 @@ function buildRenewal(T, p) {
     group: g,
     anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.6, az),
     exclusions: sites.map(([x, z]) => ({ x, z, r: 0.45 })),
+    crowd: sites.map(([x, z, d]) => ({ x, z, r: 1.1, n: 3, from: d + REBUILD })), // new residents once a tower is rebuilt
     update(d, flash) {
       mesh.material.uniforms.uFlash.value = flash;
       old.visible = rebuilt.visible = U.uGame.value > 0.5;
@@ -1323,10 +1328,36 @@ function buildSongshan(T, p) {
     pods.instanceMatrix.needsUpdate = true;
   };
   g.add(airport, vision);
+  // strolls across the park's lawns, clear of the lakes
+  const lawnWalks = [];
+  while (lawnWalks.length < 30) {
+    const x = (rnd() - 0.5) * (L - 1.5),
+      z = parkZ + (rnd() - 0.5) * (parkW - 1),
+      a = rnd() * Math.PI;
+    const w = [x, z, x + Math.cos(a) * 1.2, z + Math.sin(a) * 1.2];
+    const wet = (px, pz) => lakes.some(([lx, lz, rx, rz]) => ((px - lx) / rx) ** 2 + ((pz - lz) / rz) ** 2 < 1);
+    if (!wet(w[0], w[1]) && !wet(w[2], w[3]) && !wet((w[0] + w[2]) / 2, (w[1] + w[3]) / 2) && Math.abs(w[3] - parkZ) < parkW / 2 - 0.3) lawnWalks.push(w);
+  }
   return {
     group: g,
     anchor: new THREE.Vector3(mid.x, baseY + 5.2, mid.y),
     exclusions: [{ rect: true, x: mid.x, z: mid.y, w: L / 2 + 0.3, d: W / 2 + 0.3 }],
+    // once the park and the districts are up: the park paths, the corridors' sidewalks and the two east–west streets
+    crowd: [
+      {
+        frame: vision,
+        y: topY + 0.05,
+        n: 480,
+        from: p.event + 0.6,
+        walks: [
+          ...lawnWalks,
+          [-L / 2 + 0.4, parkZ, L / 2 - 0.4, parkZ],
+          [-L * 0.05, parkZ - parkW / 2 + 0.2, -L * 0.05, parkZ + parkW / 2 - 0.2],
+          ...[-L * 0.3, 0.02 * L, L * 0.3].flatMap((rx) => [-1, 1].map((sd) => [rx + sd * 0.19, -W / 2 + 0.2, rx + sd * 0.19, W / 2 - 0.2])),
+          ...[W / 2 - parkW, southZ].flatMap((sz) => [-1, 1].map((sd) => [-L / 2 + 0.2, sz + sd * 0.16, L / 2 - 0.2, sz + sd * 0.16])),
+        ],
+      },
+    ],
     update(d, flash) {
       // the airport makes way, then the park greens and the districts rise
       const k = smooth(p.event, p.event + 0.9, d);

@@ -10,6 +10,7 @@ import { buildSky, applyNight } from "./sky.js";
 import { buildGameTerrain, buildGameWater, buildGameCity, buildTrees, buildStreets, buildTraffic, buildCloudShadows } from "./game.js";
 import { buildIcons } from "./icons.js";
 import { buildParks } from "./parks.js";
+import { buildPeople } from "./people.js";
 import { POLICIES } from "./policies.js";
 
 const WAVE_MAX = 260; // radius that covers the whole slab from City Hall
@@ -49,8 +50,9 @@ export async function createWorld(scene, { quality }) {
   const trees = buildTrees(T, items, quality, parks, icons.exclusions);
   const streets = buildStreets(T);
   const traffic = buildTraffic(T, streets.polylines, quality);
+  const people = buildPeople(T, { polylines: streets.polylines, parks, exclusions, crowds: [...layers.values()].flatMap((l) => l.crowd || []), quality });
   const clouds = buildCloudShadows(T);
-  game.add(trees.group, streets.mesh, traffic.mesh, clouds.group);
+  game.add(trees.group, streets.mesh, traffic.mesh, people.mesh, clouds.group);
   scene.add(game);
   const real = [terrain.userData.surface, water.mesh, city.mesh, realRoads];
 
@@ -150,7 +152,7 @@ export async function createWorld(scene, { quality }) {
     layers,
     showDistrict,
     city,
-    counts: { buildings: items.length, trees: trees.count },
+    counts: { buildings: items.length, trees: trees.count, people: people.count },
     tick,
     setDate,
     setStyle,
