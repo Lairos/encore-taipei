@@ -213,5 +213,5 @@ export function describeRenewal(p, data) {
   return p;
 }
 
-// what appears in the opening montage, in date order
-export const OPENING_CAPTIONS = ["dome", "youbike", "eastring", "gongguan", "nvidia", "lunch"];
+// captions in the opening: the policies the camera is looking at when their moment comes
+export const OPENING_CAPTIONS = ["dome", "youbike", "gongguan", "sidewalk", "aiedu", "lunch", "urban5099", "civiclaw", "songshan"];

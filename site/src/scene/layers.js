@@ -1009,7 +1009,7 @@ function buildYoubike(T, p) {
     q = new THREE.Quaternion(),
     up = new THREE.Vector3(0, 1, 0),
     v = new THREE.Vector3(),
-    size = new THREE.Vector3(1.6, 1.6, 1.6);
+    size = new THREE.Vector3(2.4, 2.4, 2.4);
   let last = U.uTime.value;
   return {
     group: g,

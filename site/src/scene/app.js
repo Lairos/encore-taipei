@@ -8,7 +8,7 @@ import { createOpening, GAME_FOV_RATIO } from "./opening.js";
 import { createUI } from "./ui.js";
 import { createPersona } from "./persona.js";
 import { createLabels } from "./labels.js";
-import { POLICIES } from "./policies.js";
+import { POLICIES, OPENING_CAPTIONS } from "./policies.js";
 
 function webglReady() {
   try {
@@ -120,7 +120,7 @@ async function start() {
   const FLY_DIST = { dome: 9, gongguan: 5, nvidia: 11, autobus: 12, songshan: 34, eastring: 46, renewal: 34, lunch: 40, youbike: 40 };
   for (const [id, l] of world.layers) if (l.anchor) ui.addPin(id, l.anchor, l.policy);
   world.onMilestone((p, ev, label) => {
-    if (mode === "opening" || dateTween) ui.caption(p, ev, label);
+    if ((mode === "opening" && OPENING_CAPTIONS.includes(p.id)) || dateTween) ui.caption(p, ev, label);
   });
 
   function focusPolicy(id) {
