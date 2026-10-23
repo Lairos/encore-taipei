@@ -325,17 +325,19 @@ export function buildTrees(T, items, quality, parks, keepClear) {
   }
   // parks: wooded lawns; plazas only along their edges
   const ps = quality === "high" ? 0.26 : 0.36;
-  for (let z = e.minZ; z < e.maxZ; z += ps)
-    for (let x = e.minX; x < e.maxX; x += ps) {
-      const px = x + (rnd() - 0.5) * ps * 0.8,
-        pz = z + (rnd() - 0.5) * ps * 0.8;
-      const lawn = parks.lawn(px, pz);
-      if (!lawn && !parks.plaza(px, pz)) continue;
-      const edge = () => [[0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]].some(([dx, dz]) => !parks.plaza(px + dx, pz + dz));
-      if (lawn ? rnd() > 0.42 : !edge() || rnd() > 0.5) continue;
-      if (T.isWater(px, pz) || clear(px, pz)) continue;
-      street.push([px, T.groundY(px, pz) - 0.01, pz, 0.07 + rnd() * 0.05, rnd()]);
-    }
+  const from = (v, o) => o + Math.ceil((v - o) / ps) * ps; // first point of the city-wide grid at or after v
+  for (const [x0, z0, x1, z1] of parks.blocks)
+    for (let z = from(z0, e.minZ); z < z1; z += ps)
+      for (let x = from(x0, e.minX); x < x1; x += ps) {
+        const px = x + (rnd() - 0.5) * ps * 0.8,
+          pz = z + (rnd() - 0.5) * ps * 0.8;
+        const lawn = parks.lawn(px, pz);
+        if (!lawn && !parks.plaza(px, pz)) continue;
+        const edge = () => [[0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]].some(([dx, dz]) => !parks.plaza(px + dx, pz + dz));
+        if (lawn ? rnd() > 0.42 : !edge() || rnd() > 0.5) continue;
+        if (T.isWater(px, pz) || clear(px, pz)) continue;
+        street.push([px, T.groundY(px, pz) - 0.01, pz, 0.07 + rnd() * 0.05, rnd()]);
+      }
   const greens = ["#6db24f", "#7cc05a", "#5ea447", "#8ac765", "#4f9a46"].map(hex);
   const mat = morphPatch(new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), { pop: true });
   const lod = [];

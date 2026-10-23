@@ -1,8 +1,10 @@
 // Turns data-raw/ into the compact files the browser loads from public/data/:
-//   terrain.bin  Int16 heights (m) on the TERRAIN_STEP grid, then a Uint8 mask on a 2× finer grid (bit0 city, bit1 water)
+//   terrain.bin  Int16 heights (m) on the TERRAIN_STEP grid, then a Uint8 mask on a 2× finer grid (bit0 city, bit1 water);
+//                also as terrain.bin.gz, which the browser unpacks itself (the CDN does not compress binary)
 //   geo.json     grid metadata + simplified boundary, water, roads, schools, YouBike stations, airport (local units)
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { PNG } from "pngjs";
 import { EXTENT, TERRAIN_STEP, TERRAIN_ZOOM, tileRange, lon2tile, lat2tile, project, LAT0, LON0, KX, KZ } from "../src/scene/geo.js";
 
@@ -211,6 +213,7 @@ const bin = Buffer.alloc(heights.byteLength + mask.byteLength);
 Buffer.from(heights.buffer).copy(bin, 0);
 Buffer.from(mask.buffer).copy(bin, heights.byteLength);
 await writeFile(out("terrain.bin"), bin);
+await writeFile(out("terrain.bin.gz"), gzipSync(bin, { level: 9 }));
 await writeFile(
   out("geo.json"),
   JSON.stringify({

@@ -244,20 +244,49 @@ async function start() {
   if (reduced || pendingDeepLink || params.has("skip")) opening.skip();
   const freezeAt = params.has("t") ? +params.get("t") : null; // ?t=5 holds the opening at 5 s (for tuning)
 
-  // dynamic resolution: the cost is mostly per pixel, so trade sharpness for a steady frame rate on slower GPUs
-  let slow = 0,
+  // dynamic quality for a steady frame rate on slower GPUs, best rung first. The cost is mostly per pixel, so
+  // sharpness goes first, then the bloom, then shadows refresh every third frame; below 1 only when really slow
+  // (under 25 fps), not for a phone that merely holds itself at 30 to save power
+  const one = Math.min(1, maxRatio);
+  const rungs = [];
+  for (let r = maxRatio; r > 1.001; r -= 0.15) rungs.push({ pr: r, bloom: true, shadowEvery: 1, slowAt: 26 });
+  rungs.push(
+    { pr: one, bloom: true, shadowEvery: 1, slowAt: 26 },
+    { pr: one, bloom: false, shadowEvery: 1, slowAt: 26 },
+    { pr: one, bloom: false, shadowEvery: 3, slowAt: 40 },
+    { pr: Math.min(one, 0.85), bloom: false, shadowEvery: 3, slowAt: 40 },
+    { pr: Math.min(one, 0.75), bloom: false, shadowEvery: 3, slowAt: Infinity },
+  );
+  let rung = 0,
+    slow = 0,
     fast = 0,
-    avg = 16;
-  function adapt(ms) {
-    avg += (ms - avg) * 0.05;
-    slow = avg > 26 ? slow + 1 : 0;
-    fast = avg < 13 ? fast + 1 : 0;
-    const next = slow > 90 ? Math.max(1, pixelRatio - 0.15) : fast > 240 ? Math.min(maxRatio, pixelRatio + 0.1) : pixelRatio;
-    if (next !== pixelRatio) {
-      pixelRatio = next;
-      slow = fast = 0;
+    avg = 16,
+    patience = 600, // frames of headroom before trying the rung above; doubles each time that proves too much
+    climbed = false;
+  function setRung(i) {
+    rung = i;
+    const q = rungs[i];
+    post.bloom.enabled = q.bloom;
+    post.state.shadowEvery = q.shadowEvery;
+    if (q.pr !== pixelRatio) {
+      pixelRatio = q.pr;
       renderer.setPixelRatio(pixelRatio);
       resize();
+    }
+  }
+  function adapt(ms) {
+    avg += (Math.min(ms, 100) - avg) * 0.05; // one long stall (a shader compiling) is not a slow GPU
+    slow = avg > rungs[rung].slowAt ? slow + 1 : 0;
+    fast = avg < 18 ? fast + 1 : 0; // holding 60 fps
+    if (slow > (avg > 40 ? 20 : 90) && rung < rungs.length - 1) {
+      if (climbed) patience *= 2;
+      climbed = false;
+      setRung(rung + 1);
+      slow = fast = 0;
+    } else if (fast > patience && rung > 0) {
+      climbed = true;
+      setRung(rung - 1);
+      slow = fast = 0;
     }
   }
 
@@ -319,6 +348,10 @@ async function start() {
 
   // small hook for QA and automated captures
   window.taipei = {
+    readyAt: performance.now(), // when the city was built and the first frame queued
+    get quality() {
+      return { rung, of: rungs.length, avg: +avg.toFixed(1), ...rungs[rung] };
+    },
     camera,
     controls,
     world,

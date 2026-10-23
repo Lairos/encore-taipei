@@ -9,10 +9,23 @@ const CARVE = 0.12; // how far river beds sit below the surrounding ground
 // SRTM noise dips slightly below 0 m in the basin; only clearly negative cells are sea floor
 export const surfaceY = (h) => (h < -1.5 ? -0.12 : Math.max(0.3, h) * VS);
 
+// the CDN compresses text but not binary, so the terrain also comes gzipped (a fifth of the size on a phone network)
+// and is unpacked here; browsers without DecompressionStream take the raw file
+async function loadBin() {
+  const raw = () => fetch("/data/terrain.bin").then((r) => r.arrayBuffer());
+  if (typeof DecompressionStream === "undefined") return raw();
+  const r = await fetch("/data/terrain.bin.gz");
+  if (!r.ok) return raw();
+  const buf = await r.arrayBuffer();
+  const b = new Uint8Array(buf, 0, 2);
+  if (b[0] !== 0x1f || b[1] !== 0x8b) return buf; // a server that already decoded it
+  return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+}
+
 export async function loadTerrain() {
   const [geo, bin, renewal, landmarks] = await Promise.all([
     fetch("/data/geo.json").then((r) => r.json()),
-    fetch("/data/terrain.bin").then((r) => r.arrayBuffer()),
+    loadBin(),
     fetch("/data/renewal.json").then((r) => r.json()),
     fetch("/data/landmarks.json").then((r) => r.json()),
   ]);

@@ -12,10 +12,11 @@ const ringOf = (flat) => {
   for (let i = 0; i < flat.length; i += 2) r.push([flat[i], flat[i + 1]]);
   return r;
 };
-const inside = (x, z, r) => {
-  let c = false;
-  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
-  return c;
+// where a ring crosses the row z, left to right: inside lies between each pair
+const crossings = (z, r) => {
+  const xs = [];
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z) xs.push(((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]);
+  return xs.sort((a, b) => a - b);
 };
 
 // where a district's name goes: the middle of its built-up part (北投, 士林 and 南港 are mostly mountain),
@@ -23,9 +24,14 @@ const inside = (x, z, r) => {
 function districtPoint(T, d) {
   const xs = d.outline.map((p) => p[0]),
     zs = d.outline.map((p) => p[1]);
+  const x0 = Math.min(...xs);
   const pts = [];
-  for (let z = Math.min(...zs); z < Math.max(...zs); z += 0.8)
-    for (let x = Math.min(...xs); x < Math.max(...xs); x += 0.8) if (inside(x, z, d.outline) && T.inCity(x, z) && !T.isWater(x, z) && T.elev(x, z) < 60) pts.push([x, z]);
+  // row by row, sampling only inside the outline (a point-in-polygon test per sample is slow on a phone)
+  for (let z = Math.min(...zs); z < Math.max(...zs); z += 0.8) {
+    const c = crossings(z, d.outline);
+    for (let k = 0; k + 1 < c.length; k += 2)
+      for (let x = x0 + Math.ceil((c[k] - x0) / 0.8) * 0.8; x < c[k + 1]; x += 0.8) if (T.inCity(x, z) && !T.isWater(x, z) && T.elev(x, z) < 60) pts.push([x, z]);
+  }
   if (!pts.length) return new THREE.Vector3(d.center[0], T.groundY(...d.center), d.center[1]);
   const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length,
     mz = pts.reduce((s, p) => s + p[1], 0) / pts.length;

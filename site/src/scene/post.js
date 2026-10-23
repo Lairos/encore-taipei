@@ -13,7 +13,7 @@ class DualDatePass extends Pass {
   constructor(scene, camera, world, state) {
     super();
     this.needsSwap = false;
-    Object.assign(this, { scene, camera, world, state });
+    Object.assign(this, { scene, camera, world, state, frames: 0 });
     const opts = { type: THREE.HalfFloatType, samples: 4 };
     this.rtAfter = new THREE.WebGLRenderTarget(1, 1, opts);
     this.rtBefore = new THREE.WebGLRenderTarget(1, 1, opts);
@@ -33,7 +33,8 @@ class DualDatePass extends Pass {
   }
   render(renderer, writeBuffer, readBuffer) {
     const { scene, camera, world, state } = this;
-    renderer.shadowMap.needsUpdate = world.shadowsLive; // once per frame; the second date pass reuses it
+    // once per frame (or every few on a slow phone); the second date pass reuses it
+    renderer.shadowMap.needsUpdate = world.shadowsLive && this.frames++ % state.shadowEvery === 0;
     world.setDate(state.dateRight);
     renderer.setRenderTarget(this.rtAfter);
     renderer.clear();
@@ -94,7 +95,7 @@ const FinishShader = {
 };
 
 export function createPost(renderer, scene, camera, world) {
-  const state = { dateLeft: 0, dateRight: 0, curtain: false, split: 0.5 };
+  const state = { dateLeft: 0, dateRight: 0, curtain: false, split: 0.5, shadowEvery: 1 };
   const composer = new EffectComposer(renderer);
   const dual = new DualDatePass(scene, camera, world, state);
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 0.9);
