@@ -44,7 +44,8 @@ async function start() {
 
   const stage = document.getElementById("stage");
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-  const pixelRatio = Math.min(devicePixelRatio, quality === "high" ? 1.75 : 1.3);
+  const maxRatio = Math.min(devicePixelRatio, quality === "high" ? 1.75 : 1.3);
+  let pixelRatio = maxRatio;
   renderer.setPixelRatio(pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -232,9 +233,27 @@ async function start() {
   if (reduced || pendingDeepLink || params.has("skip")) opening.skip();
   const freezeAt = params.has("t") ? +params.get("t") : null; // ?t=5 holds the opening at 5 s (for tuning)
 
+  // dynamic resolution: the cost is mostly per pixel, so trade sharpness for a steady frame rate on slower GPUs
+  let slow = 0,
+    fast = 0,
+    avg = 16;
+  function adapt(ms) {
+    avg += (ms - avg) * 0.05;
+    slow = avg > 26 ? slow + 1 : 0;
+    fast = avg < 13 ? fast + 1 : 0;
+    const next = slow > 90 ? Math.max(1, pixelRatio - 0.15) : fast > 240 ? Math.min(maxRatio, pixelRatio + 0.1) : pixelRatio;
+    if (next !== pixelRatio) {
+      pixelRatio = next;
+      slow = fast = 0;
+      renderer.setPixelRatio(pixelRatio);
+      resize();
+    }
+  }
+
   let last = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
+    if (!document.hidden) adapt(now - last);
     step(Math.max(0, Math.min(0.05, (now - last) / 1000)), now);
     last = now;
   }

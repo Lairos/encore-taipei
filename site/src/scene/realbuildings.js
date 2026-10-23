@@ -10,15 +10,30 @@ function inside(x, z, xs, zs) {
   return c;
 }
 
+// Split into map tiles so the camera and the sun's shadow camera can skip what they cannot see.
+const TILE = 24;
 export function buildRealGeometry(T) {
+  const tiles = new Map();
+  T.landmarks.buildings.forEach((b, i) => {
+    let cx = 0,
+      cz = 0;
+    for (let k = 3; k < b.length; k += 2) (cx += b[k]), (cz += b[k + 1]);
+    const n = (b.length - 3) / 2;
+    const key = `${Math.floor(cx / n / TILE)},${Math.floor(cz / n / TILE)}`;
+    if (!tiles.has(key)) tiles.set(key, []);
+    tiles.get(key).push([b, i]);
+  });
+  return [...tiles.values()].map((list) => tileGeometry(T, list));
+}
+
+function tileGeometry(T, list) {
   const pos = [],
     nrm = [],
     wall = [], // x: distance along the facade, y: height above the building base (roof vertices: x = -1)
     meta = [], // seed, kind (+10 × special), base y, height
     center = [],
     idx = [];
-  let seed = 0;
-  for (const b of T.landmarks.buildings) {
+  for (const [b, index] of list) {
     const [h, kind, special] = b;
     const xs = [],
       zs = [];
@@ -34,7 +49,7 @@ export function buildRealGeometry(T) {
     }
     base -= 0.01;
     const top = base + h;
-    const s = (seed = (seed * 9301 + 49297) % 233280) / 2332.8;
+    const s = ((index * 9301 + 49297) % 233280) / 2332.8;
     const m = [s, kind + special * 10, base, h];
     let run = 0;
     // walls, normals pointing out of the footprint
@@ -76,7 +91,7 @@ export function buildRealGeometry(T) {
 }
 
 // ---------- night city ----------
-export function buildRealNight(geo) {
+export function buildRealNight(geos) {
   const mat = new THREE.ShaderMaterial({
     fog: true,
     side: THREE.DoubleSide,
@@ -122,8 +137,9 @@ export function buildRealNight(geo) {
       }`,
   });
   Object.assign(mat.uniforms, U);
-  const mesh = new THREE.Mesh(geo, mat);
-  return mesh;
+  const group = new THREE.Group();
+  for (const geo of geos) group.add(new THREE.Mesh(geo, mat));
+  return group;
 }
 
 // ---------- game city ----------
@@ -156,7 +172,7 @@ const GAME_COLOR = /* glsl */ `
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.84, 0.8), smoothstep(90.0, 260.0, length(vViewPosition)) * 0.6);
 `;
 
-export function buildRealGame(geo) {
+export function buildRealGame(geos) {
   const mat = morphPatch(new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }), {
     pop: true,
     merged: true,
@@ -165,7 +181,11 @@ export function buildRealGame(geo) {
     fragDecl: "varying vec2 vWall; varying vec4 vMeta;",
     fragment: GAME_COLOR,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = mesh.receiveShadow = true;
-  return mesh;
+  const group = new THREE.Group();
+  for (const geo of geos) {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  return group;
 }
