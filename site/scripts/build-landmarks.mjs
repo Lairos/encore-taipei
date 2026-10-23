@@ -299,10 +299,71 @@ const gondola = {
     .sort((a, b) => a.i - b.i),
 };
 
+// ---------- policy sites ----------
+const ps = (await json("policy-sites.json")).elements;
+const byId = (id) => ps.find((e) => e.id === id);
+const outlineOf = (e) => (e.type === "way" ? closedRing(e.geometry, 0.01) : closedRing(outerRings(e.members).sort((a, b) => b.length - a.length)[0], 0.01));
+// 聯合醫院 branches (敬老健康守護方案), 萬芳醫院 and 關渡醫院 (掛號費): where the 敬老卡 600 點 can now be used
+const HOSPITALS = [
+  [197316116, "聯合醫院和平院區"],
+  [1004862600, "聯合醫院婦幼院區"],
+  [201280863, "聯合醫院中興院區"],
+  [258418789, "聯合醫院陽明院區"],
+  [708675111, "聯合醫院昆明院區"],
+  [396909006, "聯合醫院松德院區"],
+  [660878357, "聯合醫院忠孝院區"],
+  [null, "聯合醫院仁愛院區", 25.0373, 121.5437], // no outline in OpenStreetMap; 仁愛路四段 10 號
+  [10279460, "萬芳醫院"],
+  [252752821, "關渡醫院"],
+];
+const hospitals = HOSPITALS.map(([id, name, lat, lon]) => {
+  const e = id && byId(id);
+  const at = !e ? project(lat, lon) : e.type === "node" ? project(e.lat, e.lon) : centroid(outlineOf(e));
+  return { name, at: at.map(r2) };
+});
+// 大安路一段 between 仁愛路四段 and 市民大道四段: both carriageways binned north–south into one centre line
+const streetPts = (name) => ps.filter((e) => e.type === "way" && e.tags?.name === name).flatMap((e) => local(e.geometry));
+const daan = streetPts("大安路一段");
+// the crossing with an end street: the 大安路 point closest to it
+const endZ = (name) => {
+  let best = null,
+    bd = Infinity;
+  for (const p of daan) for (const q of streetPts(name)) {
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < bd) (bd = d), (best = p[1]);
+  }
+  return best;
+};
+const zS = endZ("仁愛路四段"),
+  zN = endZ("市民大道四段");
+const sidewalk = [];
+for (let k = 0; k <= 12; k++) {
+  const z = zS + ((zN - zS) * k) / 12;
+  const near = daan.filter((p) => Math.abs(p[1] - z) < 0.6);
+  const x = near.reduce((s, p) => s + p[0], 0) / near.length;
+  sidewalk.push([r2(x), r2(z)]);
+}
+// 國中小 come with geo.json; high schools (AI Lab) are taken here
+const highSchools = [];
+for (const e of (await json("schools.json")).elements) {
+  const n = e.tags.name || "";
+  if (!/高級中學|高中|女中|附中|中學|高工|高商|高職|工業|商業|家商|商工/.test(n) || /國民|國中|國小|小學|進修|神學|大學|學院|外僑|美國|日僑|韓國|歐洲|補校|附設|實驗教育/.test(n)) continue;
+  const c = e.center || e;
+  highSchools.push([...project(c.lat, c.lon).map(r2), n]);
+}
+const policySites = {
+  hospitals,
+  sidewalk: flat(sidewalk),
+  highSchools,
+  zhongshan: flat(outlineOf(byId(136053052))), // former 第一殯儀館, now 臺北市第一停車場 (民權東路二段 145 號)
+  nangang: flat(outlineOf(byId(4793812))), // 南港高工
+};
+
 const lm = {
   icons,
   parks,
   places,
+  policySites,
   gondola,
   dome: { ...ellipse(ways.get(442195153)), outline: flat(ways.get(442195153)) },
   t101: { center: centroid(ways.get(1159328965)) },
@@ -313,5 +374,6 @@ await writeFile(out, JSON.stringify(lm));
 const byDistrict = {};
 for (const i of icons) (byDistrict[i.district] ??= new Set()).add(i.name);
 for (const [d, names] of Object.entries(byDistrict)) console.log(`  ${d}: ${[...names].join("、")}`);
+console.log(`policy sites: ${hospitals.length} hospitals, ${highSchools.length} high schools, 大安路 ${sidewalk.length} pts`);
 console.log(`icons ${icons.length}, parks ${parks.length}, gondola ${cable.length} towers / ${gondola.stations.map((s) => s.name).join(" ")}`);
 console.log(`dome ${lm.dome.a}×${lm.dome.b} @${lm.dome.angle}, stations ${S.map((s) => s.id).join(" ")}`);

@@ -55,7 +55,8 @@ function placesOf(T) {
       const r = ringOf(ic.outline);
       const x = r.reduce((s, p) => s + p[0], 0) / r.length,
         z = r.reduce((s, p) => s + p[1], 0) / r.length;
-      put(ic.name, ic.district, x, z, T.groundY(x, z) + ic.wall + (ic.roof || 0) + (ic.tower || 0));
+      // landmarks grow in the game city (icons.js sets k), and the labels only show there
+      put(ic.name, ic.district, x, z, T.groundY(x, z) + (ic.wall + (ic.roof || 0) + (ic.tower || 0)) * (ic.k || 1));
     }
   }
   const [tx, tz] = lm.t101.center;

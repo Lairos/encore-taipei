@@ -31,6 +31,10 @@ const S = {
   N2: ["Nvidia unveils Taipei HQ design｜Formosa News", "https://english.ftvnews.com.tw/news/2026527W09EA"],
   U1: ["自行劃定更新單元查詢（案件資料）｜臺北市都市更新處", "https://data.gov.tw/dataset/145802"],
   U2: ["臺北市數值地籍地段圖｜臺北市地政局", "https://data.gov.tw/dataset/157685"],
+  G2: ["公館圓環 9 月 13 日起拆除｜工商時報", "https://www.ctee.com.tw/news/20250915700934-430104"],
+  W1: ["大安路人行環境改善 東區人本環境大串聯｜臺北市政府", "https://www.gov.taipei/News_Content.aspx?n=F0DDAF49B89E9413&sms=72544237BBE4C5F6&s=F5CAD6C79315B3B8"],
+  W2: ["大安路人行環境改善啟動（預計 116 年 2 月竣工）｜臺北市交通局人本交通主題網", "https://pedestriansafety.gov.taipei/Other/page?id=286667973618438144"],
+  F1: ["一殯估 6 月開拆 北市府擬規劃停車場及綠地｜中央社", "https://www.cna.com.tw/news/aloc/202405140326.aspx"],
 };
 const src = (...ids) => ids.map((id) => ({ title: S[id][0], url: S[id][1] }));
 
@@ -80,14 +84,39 @@ export const POLICIES = [
     name: "公館圓環改造",
     status: "done",
     event: ymd(2025, 9, 29),
+    milestones: [
+      [ymd(2025, 9, 13), "公館圓環開始拆除"],
+      [ymd(2025, 9, 29), "公館圓環改造完成"],
+    ],
+    works: ymd(2025, 9, 13),
     when: "2025.09 改造完成",
     place: [25.0136, 121.5345],
     approx: true,
     before: "圓環路口",
     after: "改為一般路口設計，持續觀察成效",
-    numbers: "改造後月平均事故 12.0 件，改造前 3 年月平均 22.4 件",
+    numbers: "改造後月平均事故 12.0 件，改造前 3 年月平均 22.4 件；2025.09.13 起拆除圓環、填平地下道",
     caveat: "換成「與去年同期比」，受傷人數為 46 對 42 人，結論不同；基準期會影響判讀。",
-    sources: src(12),
+    sources: src(12, "G2"),
+  },
+  {
+    id: "sidewalk",
+    name: "大安路人行道拓寬",
+    status: "ongoing",
+    event: ymd(2025, 11, 17),
+    done: ymd(2027, 2, 28),
+    milestones: [
+      [ymd(2025, 11, 17), "大安路人行道拓寬開工"],
+      [ymd(2027, 2, 28), "大安路人行道預計完工"],
+    ],
+    when: "2025.11 開工，預計 2027.02 完工",
+    pinLabel: "大安路人行道",
+    approx: true,
+    approxLabel: "路段為實際位置，寬度放大示意",
+    before: "人行道窄，路燈、消防栓等設施佔用通行空間",
+    after: "大安路一段（仁愛路四段至市民大道四段）縮減車道、整併路燈與消防栓，除停車彎路段外，人行道拓寬至 3.5–4.2 公尺",
+    numbers: "以街廓為單元分段施工；地圖上依開工到預定完工的時間逐段呈現（施工順序為示意）",
+    caveat: "完工時間以新工處公告為準；這是單一路段的改善，不代表全市人行道都已拓寬。",
+    sources: src("W1", "W2"),
   },
   {
     id: "eastring",
@@ -165,14 +194,14 @@ export const POLICIES = [
     caveat: "由試行到常態載客，需驗證安全、設施與營運條件。",
     sources: src(22),
   },
-  // policies without a single place: shown in the list and as opening captions
-  { id: "birth", name: "生育補助加碼", status: "done", event: ymd(2023, 7, 1), when: "2023.07 修正", before: "—", after: "第 1 名 4 萬、第 2 名 4.5 萬、第 3 名起每名 5 萬元", caveat: "需符合資格，並非所有在臺北生產的家庭都可領。", sources: src(1) },
-  { id: "childcare", name: "托育補助提高", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", before: "—", after: "準公共托育最高補助 8,000 元、家長月費 2,500 元；第二胎起送托公共／準公共月費零負擔", caveat: "依核定托育類型及月費項目，非所有私立托育一律免費。", sources: src(2) },
-  { id: "elder", name: "敬老卡 600 點", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", before: "每月 480 點", after: "每月 600 點，新增醫院掛號費、YouBike 2.0E 前 30 分鐘免費等用途", caveat: "點數為指定用途補助，不等同現金。", sources: src(17) },
-  { id: "worktime", name: "育兒減工時不減薪", status: "ongoing", event: ymd(2026, 3, 1), when: "2026.03 試辦", before: "—", after: "截至 6 月底 480 家事業單位、近 900 名員工受惠；2027 年擴大辦理", caveat: "需雇主參與並符合條件，並非所有家長都已取得。", sources: src(3, 24) },
-  { id: "aiedu", name: "AI 教育白皮書", status: "ongoing", event: ymd(2026, 7, 3), when: "2026.07 發布，4 年計畫", before: "—", after: "4 年預計投入 92 億元：AI 電腦與載具、光纖到教室、高中 AI Lab、AI 教育中心", caveat: "92 億為預計投入，需按年度預算與驗收核對。", sources: src(8) },
-  { id: "urban5099", name: "公辦都更 5099、大街廓都更", status: "planned", event: ymd(2026, 10, 16), when: "2026.10 宣布", before: "公辦都更第一階段意願門檻 75%；基準容積 225%", after: "門檻降為 50%；捷運場站或水岸周邊 3,000 ㎡ 以上基地，基準容積提高至 300%，回饋托育、長照等設施", caveat: "50% 是初期意願門檻，不等於法定同意比例。", sources: src(14) },
-  { id: "civiclaw", name: "市府 AI 助理 CiviClaw", status: "planned", event: ymd(2027, 12, 1), when: "2027 年底前", before: "—", after: "全體市府同仁配置 AI Agent", caveat: "成效應以節省工時、正確率、可稽核性與個資保護衡量。", sources: src(23) },
+  // citywide policies: drawn where the city delivers them (civic.js)
+  { id: "birth", name: "生育補助加碼", status: "done", event: ymd(2023, 7, 1), when: "2023.07 修正", approx: true, approxLabel: "全市適用，標在市立婦幼院區（示意）", before: "—", after: "第 1 名 4 萬、第 2 名 4.5 萬、第 3 名起每名 5 萬元", caveat: "需符合資格，並非所有在臺北生產的家庭都可領。", sources: src(1) },
+  { id: "childcare", name: "托育補助提高", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", approx: true, approxLabel: "全市適用，圖示放在市府廣場（示意）", before: "—", after: "準公共托育最高補助 8,000 元、家長月費 2,500 元；第二胎起送托公共／準公共月費零負擔", caveat: "依核定托育類型及月費項目，非所有私立托育一律免費。", sources: src(2) },
+  { id: "elder", name: "敬老卡 600 點", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", before: "每月 480 點", after: "每月 600 點，新增醫院掛號費、YouBike 2.0E 前 30 分鐘免費等用途", numbers: "地圖上的金色卡片標在新增可用點數的醫院：聯合醫院各院區（敬老健康守護方案）、萬芳醫院、關渡醫院（掛號費）", caveat: "點數為指定用途補助，不等同現金。", sources: src(17) },
+  { id: "worktime", name: "育兒減工時不減薪", status: "ongoing", event: ymd(2026, 3, 1), milestones: [[ymd(2026, 3, 1), "育兒減工時試辦"], [2027.0, "育兒減工時擴大辦理（規劃）"]], when: "2026.03 試辦", approx: true, approxLabel: "全市適用，圖示放在市府廣場（示意）", before: "—", after: "截至 6 月底 480 家事業單位、近 900 名員工受惠；2027 年擴大辦理", caveat: "需雇主參與並符合條件，並非所有家長都已取得。", sources: src(3, 24) },
+  { id: "aiedu", name: "AI 教育白皮書", status: "ongoing", event: ymd(2026, 7, 3), when: "2026.07 發布，4 年計畫", approx: true, approxLabel: "高中位置為實際，建置順序示意", numbers: "地圖上的藍色 AI Lab 標在全市高中（OpenStreetMap），在 4 年計畫期間逐校出現；實際建置學校與順序以教育局年度計畫為準", before: "—", after: "4 年預計投入 92 億元：AI 電腦與載具、光纖到教室、高中 AI Lab、AI 教育中心", caveat: "92 億為預計投入，需按年度預算與驗收核對。", sources: src(8) },
+  { id: "urban5099", name: "公辦都更 5099、大街廓都更", status: "planned", event: ymd(2026, 10, 16), when: "2026.10 宣布", approx: true, approxLabel: "示範基地為實際位置，建築量體示意", numbers: "兩處大街廓示範區：中山行政園區（原第一殯儀館，約 1.5 公頃，2024 年拆除後暫作停車場）、南港新行政中心（南港高工周邊，約 0.7 公頃）", before: "公辦都更第一階段意願門檻 75%；基準容積 225%", after: "門檻降為 50%；捷運場站或水岸周邊 3,000 ㎡ 以上基地，基準容積提高至 300%，回饋托育、長照等設施", caveat: "50% 是初期意願門檻，不等於法定同意比例。", sources: src(14, "F1") },
+  { id: "civiclaw", name: "市府 AI 助理 CiviClaw", status: "planned", event: ymd(2027, 12, 1), when: "2027 年底前", approx: true, approxLabel: "標在市政府（示意）", before: "—", after: "全體市府同仁配置 AI Agent", caveat: "成效應以節省工時、正確率、可稽核性與個資保護衡量。", sources: src(23) },
 ];
 
 // 都更: the map count and pin label come from the real case data (public/data/renewal.json)

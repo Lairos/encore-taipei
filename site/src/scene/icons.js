@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { U } from "./shared.js";
+import { ROAD_WIDTH } from "./city.js";
 
 const BM = 0.016 * 0.8; // metres → world units, as for the city blocks
 
@@ -201,7 +202,78 @@ function bays(night = false) {
   return (bayTextures[night] = t);
 }
 
+// SimCity scale: in the game city a small landmark grows about its own centre so it reads at district zoom
+// (about 140 m across at least, at most ×2.2), as far as the main streets around it and its neighbours allow.
+// The night city keeps every building at true size. Returns name → { pivot [x, z], y0, R, k }.
+function exaggeration(T) {
+  const groups = new Map();
+  for (const ic of T.landmarks.icons) {
+    if (!ic.outline) continue;
+    const r = ringOf(ic.outline);
+    if (!groups.has(ic.name)) groups.set(ic.name, { pts: [], y0: Infinity });
+    const gr = groups.get(ic.name);
+    gr.pts.push(...r);
+    gr.y0 = Math.min(gr.y0, ...r.map(([x, z]) => T.groundY(x, z)));
+  }
+  // main-road segments, for the clearance check
+  const segs = [];
+  for (const rd of T.geo.roads) for (let i = 1; i + 3 < rd.length; i += 2) segs.push([rd[i], rd[i + 1], rd[i + 2], rd[i + 3], ROAD_WIDTH[rd[0]] / 2]);
+  const segDist = (x, z, [x0, z0, x1, z1]) => {
+    const dx = x1 - x0,
+      dz = z1 - z0,
+      l = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - x0) * dx + (z - z0) * dz) / l));
+    return Math.hypot(x - x0 - dx * t, z - z0 - dz * t);
+  };
+  const out = new Map();
+  for (const [name, gr] of groups) {
+    const pivot = centroidOf(gr.pts);
+    const R = Math.max(...gr.pts.map(([x, z]) => Math.hypot(x - pivot[0], z - pivot[1])));
+    let k = Math.min(2.2, Math.max(1, 0.7 / R));
+    // keep clear of the main streets the footprint does not already cross
+    for (const sg of segs) {
+      const d = segDist(...pivot, sg) - sg[4] - 0.03;
+      if (d > R) k = Math.min(k, d / R);
+    }
+    out.set(name, { pivot, y0: gr.y0 - 0.01, R, k: Math.max(1, k) });
+  }
+  // and of each other
+  const list = [...out.values()];
+  for (let pass = 0; pass < 4; pass++)
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i],
+          b = list[j];
+        const d = Math.hypot(a.pivot[0] - b.pivot[0], a.pivot[1] - b.pivot[1]) * 0.95;
+        const need = a.k * a.R + b.k * b.R;
+        if (need > d && a.R + b.R < d) {
+          const f = (d - a.R - b.R) / (need - a.R - b.R);
+          a.k = 1 + (a.k - 1) * f;
+          b.k = 1 + (b.k - 1) * f;
+        }
+      }
+  return out;
+}
+// vertex patch: grow about the landmark's pivot as the game style comes in
+const GROW = (sh) => {
+  sh.uniforms.uGameK = U.uGame;
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nattribute vec3 aPivot; attribute float aK; uniform float uGameK;")
+    .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed = aPivot + (transformed - aPivot) * mix(1.0, aK, smoothstep(0.3, 0.9, uGameK));");
+};
+let depthMat = null;
+function growDepth() {
+  if (!depthMat) {
+    depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    depthMat.onBeforeCompile = GROW;
+    depthMat.customProgramCacheKey = () => "icon-grow-depth";
+  }
+  return depthMat;
+}
+
 export function buildIcons(T) {
+  const scale = exaggeration(T);
+  let cur = { pivot: [0, 0], y0: 0, k: 1 }; // the landmark being built
   const group = new THREE.Group();
   const lit = []; // floodlit at night
   const wheels = [];
@@ -212,6 +284,8 @@ export function buildIcons(T) {
     if (!mats.has(key)) {
       const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive: color, emissiveIntensity: 0, side: double ? THREE.DoubleSide : THREE.FrontSide });
       if (map) Object.assign(m, { map: bays(), emissive: new THREE.Color(0xffffff), emissiveMap: bays(true) });
+      m.onBeforeCompile = GROW;
+      m.customProgramCacheKey = () => `icon-grow|${map}`;
       m.userData.glow = map ? 0.6 : glow;
       lit.push(m);
       mats.set(key, m);
@@ -222,10 +296,18 @@ export function buildIcons(T) {
     if (!buckets.has(m)) buckets.set(m, []);
     let g = geo.index ? geo.toNonIndexed() : geo;
     if (!m.map) g.deleteAttribute("uv");
+    const n = g.attributes.position.count;
+    const pv = new Float32Array(n * 3),
+      kk = new Float32Array(n).fill(cur.k);
+    for (let i = 0; i < n; i++) pv.set([cur.pivot[0], cur.y0, cur.pivot[1]], i * 3);
+    g.setAttribute("aPivot", new THREE.BufferAttribute(pv, 3));
+    g.setAttribute("aK", new THREE.BufferAttribute(kk, 1));
     buckets.get(m).push(g);
   };
 
   for (const ic of T.landmarks.icons) {
+    cur = scale.get(ic.name) || { pivot: [0, 0], y0: 0, k: 1 };
+    ic.k = cur.k; // read by the map labels
     if (ic.kind === "wheel") {
       wheels.push(buildWheel(T, ic, group));
       continue;
@@ -339,22 +421,24 @@ export function buildIcons(T) {
   }
 
   // 貓空纜車
+  cur = { pivot: [0, 0], y0: 0, k: 1 };
   const gondola = T.landmarks.gondola ? buildGondola(T, T.landmarks.gondola, add, mat, group) : null;
 
   for (const [m, geos] of buckets) {
     const mesh = new THREE.Mesh(mergeGeometries(geos), m);
     mesh.castShadow = mesh.receiveShadow = true;
+    mesh.customDepthMaterial = growDepth();
     group.add(mesh);
   }
   return {
     group,
     // ground the city blocks must keep clear of: footprints (bridges and the cable car excepted);
     // round the low historic buildings the blocks stay low too, so a temple is not lost among towers
-    exclusions: T.landmarks.icons.filter((i) => i.outline).map((i) => {
-      const r = ringOf(i.outline);
-      const [x, z] = centroidOf(r);
-      const rad = Math.max(...r.map(([px, pz]) => Math.hypot(px - x, pz - z))) + 0.12;
-      return { x, z, r: rad, low: (i.wall || 0) + (i.roof || 0) < 40 * BM ? rad + 1.4 : 0 };
+    // (at their game size, so the grown landmark has room)
+    exclusions: [...scale].map(([name, { pivot, R, k }]) => {
+      const ic = T.landmarks.icons.find((i) => i.name === name);
+      const rad = R * k + 0.12;
+      return { x: pivot[0], z: pivot[1], r: rad, low: (ic.wall || 0) + (ic.roof || 0) < 40 * BM ? rad + 1.4 : 0 };
     }),
     update() {
       for (const m of lit) m.emissiveIntensity = m.userData.glow * U.uNight.value;

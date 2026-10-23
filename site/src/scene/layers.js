@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { U, LIGHT_GLSL, mulberry, smooth } from "./shared.js";
 import { project } from "./geo.js";
 import { describeRenewal } from "./policies.js";
+import { ROAD_WIDTH } from "./city.js";
+import { buildBirth, buildElder, buildChildcare, buildWorktime, buildCiviclaw, buildAiEdu, buildLunchCampus, buildUrban5099, buildSidewalk } from "./civic.js";
 
 const GOLD = new THREE.Color("#ffc56b"),
   CYAN = new THREE.Color("#5fe3ff");
@@ -218,7 +220,20 @@ function buildDome(T, p) {
     bm.rotation.x = -Math.sin(t) * 0.18;
     beams.add(bm);
   }
-  g.add(plaza, wall, dome, ribs, ring, crown, fence, beams);
+  // as found (2022.12): the shell up but the site still fenced, scaffolding round the base, two tower cranes, bare ground
+  const works = new THREE.Group();
+  const scaffold = new THREE.Mesh(
+    new THREE.CylinderGeometry(1, 1, WALL * 1.15, 72, 4, true).scale(a + 0.06, 1, b + 0.06).translate(0, (WALL * 1.15) / 2, 0),
+    new THREE.MeshLambertMaterial({ color: 0xd98a3a, wireframe: true }),
+  );
+  const dirt = new THREE.Mesh(new THREE.CircleGeometry(1, 72).rotateX(-Math.PI / 2).scale(a + 0.45, 1, b + 0.4).translate(0, 0.016, 0), new THREE.MeshLambertMaterial({ color: 0x9c8466 }));
+  works.add(scaffold, dirt);
+  for (const [cx, cz, h] of [[a * 0.85, -b * 0.75, 2.6], [-a * 0.8, b * 0.7, 2.2]]) {
+    const c = makeCrane(h);
+    c.position.set(cx, 0, cz);
+    works.add(c);
+  }
+  g.add(plaza, wall, dome, ribs, ring, crown, fence, beams, works);
   for (const o of [plaza, wall, dome]) o.castShadow = o.receiveShadow = true;
   return {
     group: g,
@@ -227,6 +242,8 @@ function buildDome(T, p) {
     update(d, flash) {
       const on = smooth(p.event - 0.02, p.event + 0.02, d);
       fence.visible = on < 0.5;
+      works.visible = on < 0.5;
+      for (const c of works.children) if (c.userData.jib) c.userData.jib.rotation.y = Math.sin(U.uTime.value * 0.22 + c.position.x) * 1.3;
       beams.visible = on > 0.01;
       shell.emissiveIntensity = on * (0.04 + 0.16 * U.uNight.value) + flash * 0.35;
       shell.color.setHex(on > 0.5 ? 0xe4e8ee : 0x9da3ab);
@@ -288,7 +305,29 @@ function buildGongguan(T, p) {
       stripe.rotation.y = -a;
       after.add(stripe);
     }
-  junction.add(before, after);
+  // the works (2025.09.13–09.29): the island dug up, barriers round it, an excavator
+  const works = new THREE.Group();
+  works.add(new THREE.Mesh(flat(new THREE.CircleGeometry(0.42, 40)).translate(0, 0.006, 0), new THREE.MeshLambertMaterial({ color: 0x9c8466 })));
+  const barrier = new THREE.MeshLambertMaterial({ color: 0xff8a3d }),
+    white = new THREE.MeshLambertMaterial({ color: 0xf4f4f0 });
+  for (let k = 0; k < 28; k++) {
+    const t = (k / 28) * Math.PI * 2;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.02), k % 2 ? barrier : white);
+    b.position.set(Math.cos(t) * 0.5, 0.03, Math.sin(t) * 0.5);
+    b.rotation.y = -t + Math.PI / 2;
+    works.add(b);
+  }
+  const digger = new THREE.Group();
+  const yellow = new THREE.MeshLambertMaterial({ color: 0xffc233 });
+  digger.add(new THREE.Mesh(box(0.16, 0.08, 0.12, 0, 0.02, 0), yellow), new THREE.Mesh(box(0.08, 0.07, 0.1, -0.03, 0.1, 0), yellow));
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.025, 0.025).translate(0.11, 0, 0), yellow);
+  arm.position.set(0.04, 0.15, 0);
+  arm.rotation.z = -0.5;
+  digger.add(arm);
+  digger.position.set(0.1, 0, -0.08);
+  works.add(digger);
+  for (const o of works.children) o.castShadow = true;
+  junction.add(before, after, works);
   const ring = groundRing(1.2, GOLD);
   ring.position.y = 0.01;
   g.add(junction, ring);
@@ -298,7 +337,9 @@ function buildGongguan(T, p) {
     exclusions: [{ x, z, r: 0.9 }],
     update(d, flash) {
       const on = d >= p.event;
-      before.visible = !on;
+      const dig = d >= p.works && !on;
+      before.visible = !on && !dig;
+      works.visible = dig;
       after.visible = on;
       ring.material.uniforms.uA.value = on ? 0.55 + flash * 2 : 0;
     },
@@ -482,7 +523,10 @@ function buildRenewal(T, p) {
       const r = ring2(i.outline);
       const c = centroidOf(r);
       return { c, r: Math.max(...r.map(([x, z]) => Math.hypot(x - c[0], z - c[1]))) + 0.6 };
-    });
+    })
+    // and the props of the citywide policies (hospitals, the 大街廓 demonstration sites)
+    .concat(T.landmarks.policySites.hospitals.map((h) => ({ c: h.at, r: 1.2 })))
+    .concat(["zhongshan", "nangang"].map((k) => ({ c: centroidOf(ring2(T.landmarks.policySites[k])), r: 1.5 })));
   const inPoly = (x, z, r) => {
     let c = false;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
@@ -545,16 +589,32 @@ function buildRenewal(T, p) {
     n,
   );
   const m = new THREE.Matrix4();
+  // in the game city the old walk-ups stand inside each unit, grey with iron-sheet rooftop additions: approval is
+  // the first step of renewal, so they stay standing under the scaffold
+  const oldBody = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0xa59d92 }), n);
+  const oldRoof = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ color: 0x6f8fa6 }), n);
+  const mo = new THREE.Matrix4();
   for (let i = 0; i < n; i++) {
     const [x, z, d, side] = sites[i];
     // footprint follows the unit's area (√ha × 100 m = side in world units), kept readable at city scale
     const w = Math.min(1, Math.max(0.3, side * (0.85 + rnd() * 0.3))),
       dd = Math.min(1, Math.max(0.3, side * (0.85 + rnd() * 0.3))),
       h = 0.45 + rnd() * 0.7;
-    m.compose(new THREE.Vector3(x, T.groundY(x, z), z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 0.5), new THREE.Vector3(w, h, dd));
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 0.5);
+    const y = T.groundY(x, z);
+    m.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(w, h, dd));
     mesh.setMatrixAt(i, m);
+    mo.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(w * 0.8, 0.26, dd * 0.8));
+    oldBody.setMatrixAt(i, mo);
+    mo.compose(new THREE.Vector3(x, y + 0.26, z), q, new THREE.Vector3(w * 0.45, 0.07, dd * 0.5));
+    oldRoof.setMatrixAt(i, mo);
     ev[i] = d;
     size.set([w, h, dd], i * 3);
+  }
+  const old = new THREE.Group();
+  for (const o of [oldBody, oldRoof]) {
+    o.castShadow = o.receiveShadow = true;
+    old.add(o);
   }
   geo.setAttribute("aEvent", new THREE.InstancedBufferAttribute(ev, 1));
   geo.setAttribute("aSize", new THREE.InstancedBufferAttribute(size, 3));
@@ -568,12 +628,15 @@ function buildRenewal(T, p) {
     if (k > most) [most, ax, az] = [k, s[0], s[1]];
   }
   describeRenewal(p, T.renewal);
+  const g = new THREE.Group();
+  g.add(old, mesh);
   return {
-    group: mesh,
+    group: g,
     anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.6, az),
-    exclusions: [],
+    exclusions: sites.map(([x, z]) => ({ x, z, r: 0.35 })),
     update(d, flash) {
       mesh.material.uniforms.uFlash.value = flash;
+      old.visible = U.uGame.value > 0.5;
     },
   };
 }
@@ -845,14 +908,16 @@ function pointsLayer(T, list, event, colorBefore, colorAfter, sizeAfter) {
       uC0: { value: new THREE.Color(colorBefore) },
       uC1: { value: new THREE.Color(colorAfter) },
       uSize: { value: sizeAfter },
+      uGameHide: { value: 0 }, // 1: drawn only in the night city (the game city has its own props)
     },
     vertexShader: /* glsl */ `
       attribute float aSeed;
       uniform float uDate; uniform float uEvent; uniform float uTime; uniform float uScale; uniform float uSize; uniform float uFlash;
-      uniform float uReveal; uniform vec2 uRevealCenter; uniform float uGame;
+      uniform float uReveal; uniform vec2 uRevealCenter; uniform float uGame; uniform float uGameHide;
       varying float vOn; varying float vSeed; varying float vVis;
       void main() {
         vOn = smoothstep(uEvent - 0.005, uEvent + 0.02, uDate);
+        if (uGameHide > 0.5 && uGame > 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
         vSeed = aSeed;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         vVis = 1.0 - smoothstep(uReveal - 10.0, uReveal, length(position.xz - uRevealCenter));
@@ -885,18 +950,112 @@ function pointsLayer(T, list, event, colorBefore, colorAfter, sizeAfter) {
   return pts;
 }
 
+// schools: glowing points in the night city, campuses with lunch bowls in the game city (civic.js)
 function buildSchools(T, p) {
   const pts = pointsLayer(T, T.geo.schools, p.event, "#c9d3e3", "#ffc56b", 0.9);
+  pts.material.uniforms.uGameHide.value = 1;
+  const campus = buildLunchCampus(T, p);
+  const g = new THREE.Group();
+  g.add(pts, campus.group);
   const [ax, az] = project(...p.place);
-  return { group: pts, anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.2, az), exclusions: [], material: pts.material, update(d, flash) { pts.material.uniforms.uFlash.value = flash; } };
+  return {
+    group: g,
+    anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.2, az),
+    exclusions: campus.exclusions,
+    material: pts.material,
+    update(d, flash) {
+      pts.material.uniforms.uFlash.value = flash;
+      campus.update(d, flash);
+    },
+  };
 }
+
+// YouBike: the stations, and from 2024.02.28 bikes riding the main streets of the game city
 function buildYoubike(T, p) {
   const pts = pointsLayer(T, T.geo.youbike, p.event, "#c9d3e3", "#5fffe0", 0.42);
   const [ax, az] = project(...p.place);
-  return { group: pts, anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.2, az), exclusions: [], material: pts.material, update(d, flash) { pts.material.uniforms.uFlash.value = flash; } };
+  const rnd = mulberry(23);
+  const roads = [];
+  for (const r of T.geo.roads) {
+    if (r[0] < 2) continue; // primary and secondary streets, not motorways
+    const line = [];
+    for (let i = 1; i + 1 < r.length; i += 2) line.push([r[i], r[i + 1]]);
+    const lens = [0];
+    for (let i = 1; i < line.length; i++) lens.push(lens[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
+    if (lens.at(-1) > 1.5 && T.inCity(...line[0])) roads.push({ pts: line, lens, total: lens.at(-1), c: r[0] });
+  }
+  const N = 260;
+  const riders = Array.from({ length: N }, () => {
+    const r = roads[Math.floor(rnd() * roads.length)];
+    return { r, s: rnd() * r.total, v: (0.12 + rnd() * 0.08) * (rnd() < 0.5 ? 1 : -1), seg: 0 };
+  });
+  // a chunky bike: yellow frame, two black wheels, a rider (sizes exaggerated, as the cars are)
+  const parts = [
+    [new THREE.BoxGeometry(0.1, 0.02, 0.012).translate(0, 0.045, 0), "#ffc233"],
+    [new THREE.TorusGeometry(0.025, 0.008, 4, 10).translate(-0.04, 0.03, 0), "#2d3436"],
+    [new THREE.TorusGeometry(0.025, 0.008, 4, 10).translate(0.04, 0.03, 0), "#2d3436"],
+    [new THREE.CapsuleGeometry(0.013, 0.04, 2, 6).translate(-0.005, 0.085, 0), "#2e6be6"],
+    [new THREE.SphereGeometry(0.014, 8, 6).translate(-0.005, 0.125, 0), "#f2c9a0"],
+  ];
+  const bikes = parts.map(([geo, c]) => {
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: c }), N);
+    im.frustumCulled = false;
+    im.castShadow = true;
+    return im;
+  });
+  const g = new THREE.Group();
+  g.add(pts, ...bikes);
+  const m = new THREE.Matrix4(),
+    q = new THREE.Quaternion(),
+    up = new THREE.Vector3(0, 1, 0),
+    v = new THREE.Vector3(),
+    size = new THREE.Vector3(1.6, 1.6, 1.6);
+  let last = U.uTime.value;
+  return {
+    group: g,
+    anchor: new THREE.Vector3(ax, T.groundY(ax, az) + 1.2, az),
+    exclusions: [],
+    material: pts.material,
+    update(d, flash) {
+      pts.material.uniforms.uFlash.value = flash;
+      const on = d >= p.event && U.uGame.value > 0.5;
+      for (const b of bikes) b.visible = on;
+      const dt = Math.min(0.1, U.uTime.value - last);
+      last = U.uTime.value;
+      if (!on || dt <= 0) return;
+      riders.forEach((c, i) => {
+        const r = c.r;
+        c.s = (c.s + c.v * dt + r.total) % r.total;
+        while (c.seg > 0 && r.lens[c.seg] > c.s) c.seg--;
+        while (c.seg < r.lens.length - 2 && r.lens[c.seg + 1] < c.s) c.seg++;
+        const a = r.pts[c.seg],
+          b = r.pts[c.seg + 1];
+        const l = r.lens[c.seg + 1] - r.lens[c.seg] || 1;
+        const t = (c.s - r.lens[c.seg]) / l;
+        const dx = (b[0] - a[0]) / l,
+          dz = (b[1] - a[1]) / l;
+        // ride along the kerb, on the right of the direction of travel
+        const side = c.v > 0 ? 1 : -1,
+          off = ROAD_WIDTH[r.c] / 2 - 0.03;
+        const x = a[0] + (b[0] - a[0]) * t - dz * off * side,
+          z = a[1] + (b[1] - a[1]) * t + dx * off * side;
+        m.compose(v.set(x, T.groundY(x, z) + 0.035, z), q.setFromAxisAngle(up, Math.atan2(-dz, dx) + (side < 0 ? Math.PI : 0)), size);
+        for (const bk of bikes) bk.setMatrixAt(i, m);
+      });
+      for (const bk of bikes) bk.instanceMatrix.needsUpdate = true;
+    },
+  };
 }
 
 export const LAYER_BUILDERS = {
+  sidewalk: buildSidewalk,
+  birth: buildBirth,
+  childcare: buildChildcare,
+  elder: buildElder,
+  worktime: buildWorktime,
+  aiedu: buildAiEdu,
+  urban5099: buildUrban5099,
+  civiclaw: buildCiviclaw,
   dome: buildDome,
   gongguan: buildGongguan,
   eastring: buildEastRing,

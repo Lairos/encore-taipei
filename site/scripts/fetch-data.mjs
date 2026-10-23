@@ -85,6 +85,12 @@ await overpass(`(way(id:${ICON_WAYS.join(",")});relation(id:206817);node(id:5121
 await overpass(`(way(id:71266575);node["aerialway"="station"](24.96,121.56,25.0,121.6););out geom;`, "gondola.json");
 // parks, the 故宮 grounds and 艋舺公園: open ground in the city (no blocks there; lawns and trees in the game city)
 await overpass(`area["name"="臺北市"]["admin_level"="4"]->.a;(way["leisure"="park"](area.a);relation["leisure"="park"](area.a);way(id:827791918,237121375););out geom;`, "parks.json");
+// policy sites for the citywide policies: 聯合醫院 branches + 萬芳 + 關渡 (敬老卡), 婦幼院址 (生育補助),
+// the former 第一殯儀館 lot and 南港高工 (大街廓都更 demonstration sites), and 大安路一段 with its end streets (人行道拓寬)
+await overpass(
+  `(way(id:197316116,1004862600,201280863,258418789,708675111,396909006,252752821,136053052);relation(id:10279460,4793812);node(id:660878357);way["name"~"^(大安路一段|仁愛路四段|市民大道四段)$"](25.035,121.54,25.05,121.55););out geom;`,
+  "policy-sites.json",
+);
 // the 12 districts, for 我的臺北
 await overpass(`area["name"="臺北市"]["admin_level"="4"]->.a;rel(area.a)["boundary"="administrative"]["admin_level"="7"];out geom;`, "districts.json");
 // 都更: self-initiated renewal-unit cases (都更處 GIS API) and Taipei land-section boundaries (地政局)

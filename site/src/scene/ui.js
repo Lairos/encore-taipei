@@ -125,17 +125,24 @@ export function createUI({ onScrub, onCurtain, onSplit, onPin, onSkip, onCta, on
     const w = innerWidth,
       h = innerHeight;
     pinRects.length = 0;
+    // pins in policy order; one that would overlap a pin already placed waits until the view zooms in
     for (const pin of pins.values()) {
       v.copy(pin.anchor).project(camera);
-      const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-      pin.el.style.display = visible ? "" : "none";
-      if (!visible) continue;
+      let visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
       const x = (v.x * 0.5 + 0.5) * w,
         y = (-v.y * 0.5 + 0.5) * h;
+      if (visible) {
+        pin.el.style.display = "";
+        // size measured once per theme (fonts differ), so pins and map labels can keep clear of each other
+        if (!pin.w) [pin.w, pin.h] = [pin.el.offsetWidth, pin.el.offsetHeight];
+        const r = [x - pin.w / 2, y - 14 - pin.h, x + pin.w / 2, y];
+        const active = pin.el.classList.contains("active");
+        if (!active && pinRects.some((t) => r[0] < t[2] + 2 && r[2] > t[0] - 2 && r[1] < t[3] && r[3] > t[1])) visible = false;
+        else pinRects.push(r);
+      }
+      pin.el.style.display = visible ? "" : "none";
+      if (!visible) continue;
       pin.el.style.transform = `translate(${x}px, ${y - 14}px) translate(-50%, -100%)`;
-      // size measured once per theme (fonts differ), so the map labels can keep clear of the pins
-      if (!pin.w) [pin.w, pin.h] = [pin.el.offsetWidth, pin.el.offsetHeight];
-      pinRects.push([x - pin.w / 2, y - 14 - pin.h, x + pin.w / 2, y]);
       const d = curtainOn && x / w < split ? DATES.inauguration : dateRight;
       const st = stageAt(pin.policy, d);
       pin.el.style.setProperty("--c", cssc(st));

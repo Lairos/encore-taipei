@@ -68,7 +68,21 @@ export function planCity(T, { quality, exclusions, open = () => false }) {
   const e = T.extent;
   const onRoad = roadMask(T);
   const items = [];
-  const excluded = (x, z) => exclusions.some((c) => (c.rect ? Math.abs(x - c.x) < c.w && Math.abs(z - c.z) < c.d : (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r));
+  // exclusions bucketed on a coarse grid: hundreds of them (schools, hospitals, renewal sites) are checked per block
+  const G = 4,
+    buckets = new Map();
+  for (const c of exclusions) {
+    const rx = c.rect ? c.w : Math.max(c.r, c.low || 0),
+      rz = c.rect ? c.d : rx;
+    for (let i = Math.floor((c.x - rx) / G); i <= Math.floor((c.x + rx) / G); i++)
+      for (let j = Math.floor((c.z - rz) / G); j <= Math.floor((c.z + rz) / G); j++) {
+        const k = `${i},${j}`;
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push(c);
+      }
+  }
+  const near = (x, z) => buckets.get(`${Math.floor(x / G)},${Math.floor(z / G)}`) || [];
+  const excluded = (x, z) => near(x, z).some((c) => (c.rect ? Math.abs(x - c.x) < c.w && Math.abs(z - c.z) < c.d : (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r));
   for (let z = e.minZ; z < e.maxZ; z += spacing)
     for (let x = e.minX; x < e.maxX; x += spacing) {
       const px = x + (rnd() - 0.5) * spacing * 0.6,
@@ -83,7 +97,7 @@ export function planCity(T, { quality, exclusions, open = () => false }) {
       const r = rnd();
       let hm = r < 0.58 ? 10 + rnd() * 10 : r < 0.9 ? 22 + rnd() * 22 : 48 + rnd() * 60;
       hm *= 0.75 + hot * 0.55;
-      if (exclusions.some((c) => c.low && (px - c.x) ** 2 + (pz - c.z) ** 2 < c.low * c.low)) hm = Math.min(hm, 12 + rnd() * 14);
+      if (near(px, pz).some((c) => c.low && (px - c.x) ** 2 + (pz - c.z) ** 2 < c.low * c.low)) hm = Math.min(hm, 12 + rnd() * 14);
       const w = 0.16 + rnd() * 0.2 + (hm > 60 ? 0.08 : 0),
         d = 0.16 + rnd() * 0.2 + (hm > 60 ? 0.08 : 0);
       const ang = 0.18 * Math.sin(px * 0.045) + 0.14 * Math.cos(pz * 0.05) + (rnd() < 0.15 ? (rnd() - 0.5) * 0.6 : 0);
