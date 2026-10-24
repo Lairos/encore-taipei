@@ -10,7 +10,7 @@ export const SITE = {
   description: "從 2022.12.25 上任那天，到下一個臺北：用一座 3D 城市看見任內做到的事、正在做的事，和接下來的願景。每一項都附官方來源。",
   sponsor: "（待填：出資者）",
   adLabel: "競選廣告",
-  dataDate: "2026-10-23",
+  dataDate: "2026-10-24",
 };
 
 // Colours sampled from the 「台北安可」 main visual in press photos (2026-09-29); confirm against the official CI file.

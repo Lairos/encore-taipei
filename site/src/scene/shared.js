@@ -36,7 +36,7 @@ export const ymd = (y, m = 1, d = 1) => y + (Date.UTC(y, m - 1, d) - Date.UTC(y,
 
 export const DATES = {
   inauguration: ymd(2022, 12, 25),
-  today: ymd(2026, 10, 23),
+  today: ymd(2026, 10, 24),
   plan2027: ymd(2027, 12, 1),
   vision: 2033, // 願景: after the dated plans (輝達 2030, 東環段 2032, 松山機場 after the 2033 third runway)
 };

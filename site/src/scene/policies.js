@@ -1,4 +1,4 @@
-// Policy content for the prototype, taken from 「蔣萬安臺北市長任內施政與2026連任政策完整報告」(查核日 2026-10-23).
+// Policy content for the prototype, taken from 「蔣萬安臺北市長任內施政與2026連任政策完整報告」(查核日 2026-10-24).
 // status: done 已實施 / ongoing 推動中 / planned 已宣布規劃. `event` is the decimal-year moment the scene changes.
 // `approx` marks positions or footprints drawn for illustration only; `hub` marks the citywide policies with no single
 // place of their own, which hover in a ring over City Hall (civic.js).
@@ -26,7 +26,8 @@ const S = {
   22: ["首都戰略與AI智慧城市專訪｜聯合報", "https://udn.com/news/story/124652/9579778"],
   23: ["AI教育與市府AI助理政策｜臺北市政府", "https://www.gov.taipei/News_Content.aspx?n=2044902FC839D045&s=2E95049A292B7EC8"],
   24: ["育兒減工時2027年擴大辦理｜中央社", "https://www.cna.com.tw/news/aloc/202609110097.aspx"],
-  R1: ["蔣萬安報告都更成果（報核量）｜yam 新聞", "https://n.yam.com/Article/20251114690931"],
+  R2: ["都更處：近 3 年報核 353 案、年平均 117 件｜聯合新聞網", "https://udn.com/news/story/7323/9161223"],
+  L1: ["北市國中小免費午餐全面實施（18.6 萬名學童）｜臺北市教育局", "https://www.gov.taipei/News_Content.aspx?n=F0DDAF49B89E9413&sms=72544237BBE4C5F6&s=025684E5789CCB9D"],
   E1: ["環狀線東環段路線說明與設站位置｜臺北市捷運工程局", "https://www.dorts.gov.taipei/cp.aspx?n=F47E41B6C8884DC6"],
   E2: ["環狀線東環段工程資訊（CF763、CF710）｜臺北市捷運工程局", "https://www.dorts.gov.taipei/cp.aspx?n=F47E41B6C8884DC6&s=9523DB9FBC46B35B"],
   E3: ["東環段第四標 CF720 動工｜自由時報", "https://estate.ltn.com.tw/article/27547"],
@@ -41,6 +42,7 @@ const S = {
   E4: ["環狀線東環段 CF720 動土，預計民國 121 年完工｜中時新聞網", "https://www.chinatimes.com/realtimenews/20260417002862-260405"],
   N3: ["輝達台灣新總部：2026 年底動工、2030 年完工啟用｜中央社（INSIDE 轉載）", "https://www.inside.com.tw/article/41393-nvidia-taiwan-bstp"],
   S2: ["蔣萬安宣布規劃松山機場遷移 打造台北AI園區｜中央社", "https://www.cna.com.tw/news/aipl/202610080124.aspx"],
+  S3: ["蔣萬安提遷移松山機場 交通部：需就國家角度整體評估｜中央社", "https://www.cna.com.tw/news/aipl/202610080126.aspx"],
 };
 const src = (...ids) => ids.map((id) => ({ title: S[id][0], url: S[id][1] }));
 
@@ -85,7 +87,7 @@ export const POLICIES = [
     before: "家長自付午餐費",
     after: "公私立國中小約 18.6 萬名學生受惠；鮮奶週報 3.0 同步擴大到國中，涵蓋約 28.9 萬名學幼生",
     caveat: "免費與否不能直接推論餐食品質，食安需另看採購與抽驗。",
-    sources: src(5, 6),
+    sources: src("L1", 5, 6),
   },
   {
     id: "gongguan",
@@ -137,16 +139,16 @@ export const POLICIES = [
       [ymd(2025, 10, 20), "東環段 CF760 開工（永春—吳興街）"],
       [ymd(2026, 3, 10), "東環段 CF710 開工（劍南路—瑞光公園）"],
       [ymd(2026, 4, 17), "東環段 CF720 動工（瑞光公園—舊宗路）"],
-      [2032.5, "東環段預計完工通車"],
+      [ymd(2032, 9, 1), "東環段預計完工"],
     ],
-    done: 2032.5,
+    done: ymd(2032, 9, 1),
     when: "2024.12 起陸續開工，預計 2032 年完工",
     approx: true,
     approxLabel: "依捷運局站位繪製",
     before: "規劃中",
     after: "全線 13.25 公里、10 站，分 6 個標案：CF763（吳興街—動物園）2024.12.24 開工、CF760（永春—吳興街）2025.10.20 開工、CF710（劍南路—瑞光公園）2026.03.10 開工、CF720（瑞光公園—舊宗路）2026.04.17 動工；Y35 站、東機廠與松山、永春段仍在招標",
     numbers: "地圖上的路線與 Y30–Y39 車站依捷運局公布的設站位置與行經道路繪製；橘色為已開工標段，虛線為招標中",
-    caveat: "標案開工不等於全線完工通車；預計 2032 年（民國 121 年）完工，以捷運局公告為準。東環段為地下路線，地圖上的路線與完工後的車站出入口、站前廣場人潮與列車為依站位描繪的示意，非施工圖。",
+    caveat: "標案開工不等於全線完工通車；捷運局表示整體預定 2032 年（民國 121 年）9 月完工，仍有 2 個標案招標中，以捷運局公告為準。東環段為地下路線，地圖上的路線與完工後的車站出入口、站前廣場人潮與列車為依站位描繪的示意，非施工圖。",
     sources: src(11, "E1", "E2", "E3", "E4"),
   },
   {
@@ -183,7 +185,7 @@ export const POLICIES = [
     // pinLabel and numbers are filled in from the real case data (layers.js)
     caveat:
       "鷹架代表「更新單元劃定已核准」，是都更的第一步，之後還要事業計畫報核、審議、權利變換、拆除與興建，不代表已開工。位置依各案所在地段（小段）放置，誤差約數百公尺。報核 353 案與地圖上的案件是不同階段的統計。願景畫面中，核准約 5 年後的單元以施工中（吊車）、約 8 年後以完工新大樓呈現，這是依一般都更流程的假設示意，不是個案進度。",
-    sources: src(16, "R1", "U1", "U2"),
+    sources: src(16, "R2", "U1", "U2"),
   },
   {
     id: "songshan",
@@ -193,10 +195,10 @@ export const POLICIES = [
     when: "長期願景（尚無核定時程）",
     place: [25.0669, 121.55335],
     before: "松山機場",
-    after: "整合 300 公頃：AI 產業聚落 100 公頃、國際永續生活聚落 90 公頃，以及北側 110 公頃「台北中央公園」，結合基隆河大直段河岸再生；基河路、建業三路、北安路跨河廊道穿越園區銜接市中心",
+    after: "整合 300 公頃：AI 產業聚落 100 公頃、國際永續生活聚落 90 公頃，以及北側 110 公頃「台北中央公園」，結合基隆河大直段河岸再造；有機會從基湖路、敬業三路、北安路新增跨河廊道，穿越機場腹地銜接松山及信義",
     numbers: "規劃情境估計：6.5 萬就業人口、3.5 萬居住人口；帶動周邊 570 公頃都更",
-    caveat: "需中央協調（航空、國防等），尚非中央核定計畫，也沒有核定時程；市府以桃園機場第三跑道 2033 年完工為承接條件。地圖上中央公園位於北側依市府說明，AI 聚落與生活聚落的位置、建築量體為示意。",
-    sources: src(21, "S2"),
+    caveat: "需中央協調（航空、國防等），尚非中央核定計畫，也沒有核定時程；交通部回應需就國家整體角度審慎評估。市府以桃園機場第三跑道 2033 年完工為承接條件。地圖上中央公園位於北側依市府說明，AI 聚落與生活聚落的位置、建築量體為示意。",
+    sources: src(21, "S2", "S3"),
   },
   {
     id: "autobus",
@@ -218,7 +220,7 @@ export const POLICIES = [
   { id: "elder", name: "敬老卡 600 點", status: "done", event: ymd(2026, 7, 1), when: "2026.07 起", hub: true, approx: true, approxLabel: AT_HALL, before: "每月 480 點", after: "每月 600 點，新增醫院掛號費、YouBike 2.0E 前 30 分鐘免費等用途", numbers: "新增可用點數的醫院：聯合醫院各院區（敬老健康守護方案）、萬芳醫院、關渡醫院（掛號費）", caveat: "點數為指定用途補助，不等同現金。", sources: src(17) },
   { id: "worktime", name: "育兒減工時不減薪", status: "ongoing", event: ymd(2026, 3, 1), milestones: [[ymd(2026, 3, 1), "育兒減工時試辦"], [2027.0, "育兒減工時擴大辦理（規劃）"]], when: "2026.03 試辦", pinLabel: "育兒減工時", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "截至 6 月底 480 家事業單位、近 900 名員工受惠；2027 年擴大辦理", caveat: "需雇主參與並符合條件，並非所有家長都已取得。", sources: src(3, 24) },
   { id: "aiedu", name: "AI 教育白皮書", status: "ongoing", event: ymd(2026, 7, 3), when: "2026.07 發布，4 年計畫", hub: true, approx: true, approxLabel: AT_HALL, numbers: "高中 AI Lab 在 4 年計畫期間逐校建置；實際建置學校與順序以教育局年度計畫為準", before: "—", after: "4 年預計投入 92 億元：AI 電腦與載具、光纖到教室、高中 AI Lab、AI 教育中心", caveat: "92 億為預計投入，需按年度預算與驗收核對。", sources: src(8) },
-  { id: "urban5099", name: "公辦都更 5099、大街廓都更", status: "planned", event: ymd(2026, 10, 16), when: "2026.10 宣布", approx: true, approxLabel: "示範基地為實際位置，建築量體示意", numbers: "兩處大街廓示範區：中山行政園區（原第一殯儀館，約 1.5 公頃，2024 年拆除後暫作停車場）、南港新行政中心（南港高工周邊，約 0.7 公頃）", before: "公辦都更第一階段意願門檻 75%；基準容積 225%", after: "門檻降為 50%；捷運場站或水岸周邊 3,000 ㎡ 以上基地，基準容積提高至 300%，回饋托育、長照等設施", caveat: "50% 是初期意願門檻，不等於法定同意比例。", sources: src(14, "F1") },
+  { id: "urban5099", name: "公辦都更 5099、大街廓都更", status: "planned", event: ymd(2026, 10, 16), when: "2026.10 宣布", approx: true, approxLabel: "示範基地為實際位置，建築量體示意", numbers: "兩處大街廓示範區：中山行政園區（原第一殯儀館，約 1.5 公頃，2024 年拆除，市府規劃先作停車場或綠地）、南港新行政中心（南港高工周邊，約 0.7 公頃）", before: "公辦都更第一階段意願門檻 75%；基準容積 225%", after: "門檻降為 50%；捷運場站或水岸周邊 3,000 ㎡ 以上基地，基準容積提高至 300%，回饋托育、長照等設施", caveat: "50% 是初期意願門檻，不等於法定同意比例。", sources: src(14, "F1") },
   { id: "civiclaw", name: "市府 AI 助理 CiviClaw", status: "planned", event: ymd(2027, 12, 1), when: "2027 年底前", pinLabel: "市府 AI 助理", hub: true, approx: true, approxLabel: AT_HALL, before: "—", after: "全體市府同仁配置 AI Agent", caveat: "成效應以節省工時、正確率、可稽核性與個資保護衡量。", sources: src(23) },
 ];
 

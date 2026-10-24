@@ -1068,7 +1068,7 @@ function buildSongshan(T, p) {
 
   // vision (市府 2026.10.08): 300 ha aligned with the runway. 台北中央公園 (110 ha) runs along the north side to the
   // 基隆河; the AI 產業聚落 (100 ha) and the 國際永續生活聚落 (90 ha) share the south side (which goes where is
-  // illustrative). 基河路, 建業三路 and 北安路 cross the site towards the city centre.
+  // illustrative). Cross-river corridors from 基湖路, 敬業三路 and 北安路 cross the site towards 松山 and 信義.
   const W = 300 / (len + 2);
   const L = len + 2;
   const vision = new THREE.Group();
